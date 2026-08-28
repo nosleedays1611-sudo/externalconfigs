@@ -4,7 +4,15 @@ const cors = require("cors");
 const db = require("./database");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+/* =========================
+   SHARD CLOUD / SERVIDOR
+========================= */
+
+const PORT = Number(process.env.PORT) || 80;
+const HOST = "0.0.0.0";
+
+const PUBLIC_URL = "https://externalconfig.shardweb.app";
 
 /* =========================
    CORS
@@ -25,7 +33,8 @@ app.use(express.json());
 app.get("/health", (req, res) => {
     res.json({
         ok: true,
-        message: "API funcionando"
+        message: "API funcionando",
+        url: PUBLIC_URL
     });
 });
 
@@ -676,10 +685,12 @@ app.use((error, req, res, next) => {
    INICIAR SERVIDOR
 ========================= */
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
     console.log("=================================");
     console.log("Banco de dados conectado.");
-    console.log(`API rodando em http://localhost:${PORT}`);
+    console.log(`Servidor escutando em ${HOST}:${PORT}`);
+    console.log(`API pública: ${PUBLIC_URL}`);
+    console.log(`Health: ${PUBLIC_URL}/health`);
     console.log("CORS habilitado.");
     console.log("=================================");
 });
