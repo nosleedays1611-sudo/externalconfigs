@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#0d0d0d">
+<title>GENERATOR EXTERNAL IOS</title>
+<style>
+
+:root{--bg:#0d0d0d;--card:#181818;--white:#f5f5f5;--muted:#777;--green:#00ff88;--red:#ff5c68}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;min-height:100%}
+body{background:radial-gradient(circle at 50% -10%,rgba(255,255,255,.07),transparent 35%),#0d0d0d;color:var(--white);font-family:Arial,Helvetica,sans-serif}
+button,input,select{font:inherit}button{cursor:pointer}
+.auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{width:100%;max-width:430px;padding:25px;background:linear-gradient(145deg,rgba(255,255,255,.035),transparent),var(--card);border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.logo{width:70px;height:70px;object-fit:cover;border-radius:18px;display:block;margin:0 auto 15px}
+h1{text-align:center;font-size:20px;margin:0 0 5px}.subtitle{text-align:center;color:var(--muted);font-size:11px;margin-bottom:25px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:rgba(255,255,255,.04);border-radius:10px;margin-bottom:20px}
+.tab{border:0;padding:10px;color:#777;background:transparent;border-radius:8px}.tab.active{color:white;background:rgba(255,255,255,.1)}
+.form{display:none}.form.active{display:block}.field{margin-bottom:14px}
+label{display:block;margin-bottom:7px;color:#999;font-size:11px;font-weight:bold}
+input,select{width:100%;padding:13px;color:white;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;outline:none}
+select option{background:#151515}input:focus,select:focus{border-color:rgba(255,255,255,.35)}
+.btn{width:100%;padding:13px;border:1px solid rgba(255,255,255,.15);border-radius:9px;color:white;background:rgba(255,255,255,.12);font-weight:bold;margin-top:5px}.btn:hover{background:rgba(255,255,255,.2)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.message{min-height:18px;text-align:center;font-size:11px;margin-top:12px}.error{color:var(--red)}.success{color:var(--green)}
+#panel{display:none;padding:25px 15px 50px}.container{max-width:850px;margin:auto}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}.header-title{font-weight:bold}.logout{background:transparent;border:0;color:#777;font-size:20px}
+.panel-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px;margin-bottom:12px}
+.title{color:#ddd;font-size:11px;letter-spacing:1px;font-weight:bold;margin-bottom:18px}
+.key-result{display:none;margin-top:15px;padding:15px;border-radius:10px;background:rgba(0,255,136,.04);border:1px solid rgba(0,255,136,.12);text-align:center}.key-result.show{display:block}
+.generated-key{color:var(--green);font-family:monospace;font-size:15px;font-weight:bold;word-break:break-all;user-select:text}
+.copy-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}.copy-row .btn{margin-top:0}
+.info{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}.info:last-child{border-bottom:0}.info span:first-child{color:#777}.info span:last-child{text-align:right}
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#202020;border:1px solid rgba(255,255,255,.1);padding:10px 15px;border-radius:9px;font-size:11px;transition:.2s;z-index:9999}.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:500px){.copy-row{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+
+<section id="panel" style="display:block">
+<div class="container">
+<div class="header">
+<div class="header-title">GENERATOR EXTERNAL IOS</div>
+<button type="button" class="logout" id="refreshButton" title="Atualizar">↻</button>
+</div>
+
+<div class="panel-card">
+<div class="title">GERAR KEY</div>
+
+<div class="field">
+<label>DURAÇÃO</label>
+<select id="duration">
+<option value="1d">1 Dia</option>
+<option value="7d">7 Dias</option>
+<option value="30d">30 Dias</option>
+<option value="custom">Personalizado</option>
+</select>
+</div>
+
+<div class="field" id="customDaysField" style="display:none">
+<label>QUANTIDADE DE DIAS</label>
+<input id="customDays" type="number" min="1" step="1" placeholder="Ex.: 30000" autocomplete="off">
+</div>
+
+<div class="field">
+<label>PREFIXO</label>
+<input id="prefix" value="EXT" maxlength="24" autocomplete="off">
+</div>
+
+<button type="button" class="btn" id="generateButton">Gerar Key</button>
+
+<div class="key-result" id="generatedResult">
+<div class="generated-key" id="generatedKey">—</div>
+<div class="copy-row">
+<button type="button" class="btn" id="copyButton">Copiar Key</button>
+<button type="button" class="btn" id="selectButton">Selecionar</button>
+</div>
+</div>
+</div>
+
+<div class="panel-card">
+<div class="title">CONSULTAR / GERENCIAR KEY</div>
+
+<div class="field">
+<label>KEY</label>
+<input id="checkInput" placeholder="EXT-IOS-XXXXX" autocomplete="off">
+</div>
+
+<button type="button" class="btn" id="checkButton">Consultar</button>
+
+<div id="checkResult" style="display:none;margin-top:15px">
+<div class="info"><span>Status</span><span id="checkStatus">—</span></div>
+<div class="info"><span>Prefixo</span><span id="checkPrefix">—</span></div>
+<div class="info"><span>Plano</span><span id="checkDuration">—</span></div>
+<div class="info"><span>Dias</span><span id="checkDays">—</span></div>
+<div class="info"><span>Criada em</span><span id="checkCreated">—</span></div>
+<div class="info"><span>Ativada em</span><span id="checkActivated">Nunca</span></div>
+<div class="info"><span>Expira em</span><span id="checkExpires">Nunca</span></div>
+<div class="info"><span>Pausada em</span><span id="checkPaused">—</span></div>
+<div class="info"><span>Tempo restante</span><span id="checkRemaining">—</span></div>
+
+<div class="copy-row">
+<button type="button" class="btn" id="resetKeyButton">Resetar</button>
+<button type="button" class="btn" id="pauseKeyButton">Pausar</button>
+</div>
+
+<div class="copy-row">
+<button type="button" class="btn" id="resumeKeyButton">Retomar</button>
+<button type="button" class="btn" id="deleteKeyButton">Excluir</button>
+</div>
+</div>
+</div>
+
+<div class="panel-card">
+<div class="title">KEYS DO BANCO</div>
+<button type="button" class="btn" id="listButton">Atualizar Lista</button>
+
+<div id="keysList" style="margin-top:15px"></div>
+</div>
+
+</div>
+</div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/*
+ * Se o HTML estiver sendo aberto pelo Live Server,
+ * usa a API em localhost:3000.
+ *
+ * Se o HTML estiver hospedado junto com o server.js,
+ * usa a mesma origem.
+ */
+const API = (() => {
+    const host = window.location.hostname;
+    const port = window.location.port;
+
+    if (host === "localhost" || host === "127.0.0.1") {
+        if (port !== "3000") return "http://127.0.0.1:3000";
+        return "";
+    }
+
+    return "";
+})();
+
+async function request(endpoint, options={}) {
+    const headers = {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+    };
+
+    let response;
+
+    try {
+        response = await fetch(API + endpoint, {
+            ...options,
+            headers,
+            cache: "no-store"
+        });
+    } catch (error) {
+        console.error("REQUEST:", error);
+        throw new Error("Não foi possível conectar à API.");
+    }
+
+    const text = await response.text();
+    let data = {};
+
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = {
+            success: false,
+            message: text || "Resposta inválida da API."
+        };
+    }
+
+    return { response, data };
+}
+
+let toastTimer = null;
+
+function toast(message) {
+    const element = document.getElementById("toast");
+    element.textContent = String(message || "");
+    element.classList.add("show");
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        element.classList.remove("show");
+    }, 2500);
+}
+
+function formatDate(value) {
+    if (!value) return "Nunca";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleString("pt-BR");
+}
+
+function formatRemaining(ms) {
+    if (!ms || ms <= 0) return "—";
+
+    let seconds = Math.floor(ms / 1000);
+
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+
+    const parts = [];
+
+    if (days) parts.push(days + "d");
+    if (hours) parts.push(hours + "h");
+    if (minutes) parts.push(minutes + "m");
+    if (!parts.length) parts.push(seconds + "s");
+
+    return parts.join(" ");
+}
+
+function statusText(status) {
+    const map = {
+        unused: "NÃO ATIVADA",
+        active: "ATIVA",
+        paused: "PAUSADA",
+        expired: "EXPIRADA"
+    };
+
+    return map[status] || status || "—";
+}
+
+function statusClass(status) {
+    return String(status || "").toLowerCase();
+}
+
+function updateButtons(data) {
+    const pause = document.getElementById("pauseKeyButton");
+    const resume = document.getElementById("resumeKeyButton");
+
+    pause.disabled = data.status !== "active";
+    resume.disabled = data.status !== "paused";
+}
+
+document.getElementById("duration").addEventListener("change", () => {
+    const custom = document.getElementById("duration").value === "custom";
+    document.getElementById("customDaysField").style.display = custom ? "block" : "none";
+});
+
+document.getElementById("generateButton").addEventListener("click", async () => {
+    const button = document.getElementById("generateButton");
+    const prefixInput = document.getElementById("prefix");
+    const duration = document.getElementById("duration").value;
+    const prefix = prefixInput.value.trim();
+
+    if (!prefix) {
+        toast("Digite um prefixo.");
+        prefixInput.focus();
+        return;
+    }
+
+    if (!/^[A-Za-z0-9_-]{1,24}$/.test(prefix)) {
+        toast("Prefixo inválido.");
+        prefixInput.focus();
+        return;
+    }
+
+    const body = {
+        prefix,
+        plan: duration
+    };
+
+    if (duration === "custom") {
+        const days = Number(document.getElementById("customDays").value);
+
+        if (!Number.isInteger(days) || days <= 0) {
+            toast("Informe uma quantidade de dias válida.");
+            return;
+        }
+
+        body.days = days;
+    }
+
+    button.disabled = true;
+    button.textContent = "Gerando...";
+
+    try {
+        const { response, data } = await request("/api/keys/generate", {
+            method: "POST",
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao gerar key.");
+        }
+
+        document.getElementById("generatedKey").textContent = data.key;
+        document.getElementById("generatedResult").classList.add("show");
+        document.getElementById("checkInput").value = data.key;
+
+        toast("Key gerada com sucesso.");
+        loadKeys();
+    } catch (error) {
+        console.error("GENERATE:", error);
+        toast(error.message);
+    } finally {
+        button.disabled = false;
+        button.textContent = "Gerar Key";
+    }
+});
+
+document.getElementById("copyButton").addEventListener("click", async () => {
+    const key = document.getElementById("generatedKey").textContent.trim();
+
+    if (!key || key === "—") {
+        toast("Nenhuma key gerada.");
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(key);
+        toast("Key copiada.");
+    } catch {
+        toast("Não foi possível copiar automaticamente.");
+    }
+});
+
+document.getElementById("selectButton").addEventListener("click", () => {
+    const element = document.getElementById("generatedKey");
+    const range = document.createRange();
+
+    range.selectNodeContents(element);
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    toast("Key selecionada.");
+});
+
+async function checkKey() {
+    const key = document.getElementById("checkInput").value.trim();
+
+    if (!key) {
+        toast("Digite uma key.");
+        return;
+    }
+
+    const button = document.getElementById("checkButton");
+
+    button.disabled = true;
+    button.textContent = "Consultando...";
+
+    try {
+        const { response, data } = await request("/api/keys/check", {
+            method: "POST",
+            body: JSON.stringify({ key })
+        });
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao consultar key.");
+        }
+
+        if (!data.found) {
+            document.getElementById("checkResult").style.display = "none";
+            toast("Key não encontrada.");
+            return;
+        }
+
+        document.getElementById("checkStatus").textContent = statusText(data.status);
+        document.getElementById("checkPrefix").textContent = data.prefix || "—";
+
+        const days = data.days;
+        document.getElementById("checkDays").textContent =
+            days ? String(days) : "—";
+
+        document.getElementById("checkDuration").textContent =
+            days ? (days + (days === 1 ? " dia" : " dias")) : "—";
+
+        document.getElementById("checkCreated").textContent =
+            formatDate(data.created_at);
+
+        document.getElementById("checkActivated").textContent =
+            formatDate(data.activated_at);
+
+        document.getElementById("checkExpires").textContent =
+            formatDate(data.expires_at);
+
+        document.getElementById("checkPaused").textContent =
+            formatDate(data.paused_at);
+
+        document.getElementById("checkRemaining").textContent =
+            formatRemaining(data.remaining_ms);
+
+        document.getElementById("checkResult").style.display = "block";
+
+        updateButtons(data);
+        toast("Key consultada.");
+    } catch (error) {
+        console.error("CHECK:", error);
+        document.getElementById("checkResult").style.display = "none";
+        toast(error.message);
+    } finally {
+        button.disabled = false;
+        button.textContent = "Consultar";
+    }
+}
+
+document.getElementById("checkButton").addEventListener("click", checkKey);
+
+async function manageKey(endpoint, method, successMessage) {
+    const key = document.getElementById("checkInput").value.trim();
+
+    if (!key) {
+        toast("Consulte uma key primeiro.");
+        return;
+    }
+
+    try {
+        const { response, data } = await request(endpoint, {
+            method,
+            body: JSON.stringify({ key })
+        });
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Operação não realizada.");
+        }
+
+        toast(successMessage);
+        await checkKey();
+        await loadKeys();
+    } catch (error) {
+        console.error("KEY MANAGEMENT:", error);
+        toast(error.message);
+    }
+}
+
+document.getElementById("resetKeyButton").addEventListener("click", async () => {
+    if (!confirm("Resetar esta key? Ela voltará para NÃO ATIVADA e o prazo será zerado.")) return;
+
+    await manageKey(
+        "/api/keys/reset",
+        "POST",
+        "Key resetada."
+    );
+});
+
+document.getElementById("pauseKeyButton").addEventListener("click", async () => {
+    if (!confirm("Pausar esta key? O tempo restante será preservado.")) return;
+
+    await manageKey(
+        "/api/keys/pause",
+        "POST",
+        "Key pausada."
+    );
+});
+
+document.getElementById("resumeKeyButton").addEventListener("click", async () => {
+    await manageKey(
+        "/api/keys/resume",
+        "POST",
+        "Key retomada."
+    );
+});
+
+document.getElementById("deleteKeyButton").addEventListener("click", async () => {
+    const key = document.getElementById("checkInput").value.trim();
+
+    if (!key) {
+        toast("Consulte uma key primeiro.");
+        return;
+    }
+
+    if (!confirm("Excluir esta key permanentemente? Esta ação não pode ser desfeita.")) return;
+
+    try {
+        const { response, data } = await request("/api/keys/delete", {
+            method: "DELETE",
+            body: JSON.stringify({ key })
+        });
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao excluir key.");
+        }
+
+        document.getElementById("checkResult").style.display = "none";
+        document.getElementById("checkInput").value = "";
+
+        toast("Key excluída.");
+        loadKeys();
+    } catch (error) {
+        console.error("DELETE:", error);
+        toast(error.message);
+    }
+});
+
+async function loadKeys() {
+    const container = document.getElementById("keysList");
+    container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando...</div>';
+
+    try {
+        const { response, data } = await request("/api/keys");
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao listar keys.");
+        }
+
+        if (!data.keys.length) {
+            container.innerHTML =
+                '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
+            return;
+        }
+
+        container.innerHTML = data.keys.map(key => `
+            <div style="border-bottom:1px solid rgba(255,255,255,.06);padding:12px 0">
+                <div style="font-family:monospace;color:var(--green);font-size:12px;word-break:break-all">
+                    ${key.key}
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:7px;color:#777;font-size:10px">
+                    <span>${statusText(key.status)}</span>
+                    <span>${key.days ? key.days + (key.days === 1 ? " dia" : " dias") : "—"}</span>
+                </div>
+            </div>
+        `).join("");
+    } catch (error) {
+        console.error("LIST:", error);
+        container.innerHTML =
+            '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">Erro ao carregar keys.</div>';
+    }
+}
+
+document.getElementById("listButton").addEventListener("click", loadKeys);
+document.getElementById("refreshButton").addEventListener("click", loadKeys);
+
+loadKeys();
+</script>
+</body>
+</html>
