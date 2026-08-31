@@ -530,6 +530,116 @@ select:focus{
 .tab-page{display:none}
 .tab-page.active{display:block}
 
+
+/* ==================================================
+   DASHBOARD / MENU DE ABAS
+================================================== */
+.dashboard-toggle{
+    font-size:22px;
+    line-height:1;
+}
+
+.dashboard-backdrop{
+    position:fixed;
+    inset:0;
+    z-index:9990;
+    background:rgba(0,0,0,.46);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+    opacity:0;
+    pointer-events:none;
+    transition:.22s ease;
+}
+
+.dashboard-backdrop.show{
+    opacity:1;
+    pointer-events:auto;
+}
+
+.dashboard-drawer{
+    position:fixed;
+    top:14px;
+    right:14px;
+    bottom:14px;
+    z-index:9991;
+    width:min(330px,calc(100vw - 28px));
+    padding:18px;
+    border-radius:28px;
+    transform:translateX(calc(100% + 30px));
+    transition:transform .24s cubic-bezier(.2,.75,.2,1);
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.018) 36%,rgba(255,255,255,.01)),
+        rgba(14,16,19,.76);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 26px 90px rgba(0,0,0,.58),inset 0 1px 0 rgba(255,255,255,.09);
+    backdrop-filter:blur(30px) saturate(145%);
+    -webkit-backdrop-filter:blur(30px) saturate(145%);
+    overflow:auto;
+}
+
+.dashboard-drawer.show{
+    transform:translateX(0);
+}
+
+.dashboard-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:18px;
+}
+
+.dashboard-title{
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:1.4px;
+    color:#e9ebef;
+}
+
+.dashboard-tabs{
+    display:grid;
+    gap:9px;
+}
+
+.dashboard-tab{
+    width:100%;
+    text-align:left;
+    padding:14px 15px;
+    border-radius:15px;
+    border:1px solid rgba(255,255,255,.09);
+    color:#9298a1;
+    background:rgba(255,255,255,.028);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+    transition:.17s ease;
+}
+
+.dashboard-tab:hover{
+    color:#fff;
+    background:rgba(255,255,255,.055);
+    border-color:rgba(255,255,255,.14);
+}
+
+.dashboard-tab.active{
+    color:#fff;
+    background:
+        linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.045));
+    border-color:rgba(255,255,255,.14);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 10px 25px rgba(0,0,0,.16);
+}
+
+.tab-page{display:none}
+.tab-page.active{display:block}
+
+@media(max-width:500px){
+    .dashboard-drawer{
+        top:10px;
+        right:10px;
+        bottom:10px;
+        width:calc(100vw - 20px);
+        border-radius:24px;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -564,11 +674,35 @@ select:focus{
 <div class="user-badge" id="currentUser">—</div>
 </div>
 <div class="header-actions">
+<button type="button" class="icon-btn dashboard-toggle" id="dashboardButton" title="Dashboard" aria-label="Abrir dashboard">≡</button>
 <button type="button" class="icon-btn" id="refreshButton" title="Atualizar">↻</button>
 <button type="button" class="icon-btn" id="logoutButton" title="Sair">×</button>
 </div>
 </div>
 
+<div class="dashboard-backdrop" id="dashboardBackdrop"></div>
+
+<aside class="dashboard-drawer" id="dashboardDrawer" aria-hidden="true">
+    <div class="dashboard-head">
+        <div>
+            <div class="dashboard-title">DASHBOARD</div>
+            <div class="user-badge" id="dashboardUser">—</div>
+        </div>
+        <button type="button" class="icon-btn" id="dashboardClose" title="Fechar">×</button>
+    </div>
+
+    <div class="dashboard-tabs">
+        <button type="button" class="dashboard-tab active tab-btn" data-tab="main">
+            Painel
+        </button>
+
+        <button type="button" class="dashboard-tab tab-btn" data-tab="account">
+            Contas
+        </button>
+    </div>
+</aside>
+
+<div id="tabMain" class="tab-page active">
 
 <div class="panel-card">
 <div class="title">GERAR KEY</div>
@@ -648,6 +782,8 @@ select:focus{
 <div class="title">KEYS DO BANCO</div>
 <button type="button" class="btn" id="listButton">Atualizar Lista</button>
 <div id="keysList" style="margin-top:15px"></div>
+</div>
+
 </div>
 
 </div>
@@ -931,9 +1067,15 @@ function showPanel(user) {
     document.getElementById("auth").style.display = "none";
     document.getElementById("panel").style.display = "block";
 
-    document.getElementById("currentUser").textContent =
+    const userLabel =
         user.username +
         (user.role === "owner" ? " • OWNER" : " • USER");
+
+    document.getElementById("currentUser").textContent =
+        userLabel;
+
+    document.getElementById("dashboardUser").textContent =
+        userLabel;
 
     document.getElementById("ownerCard").style.display = "block";
 
@@ -2403,8 +2545,42 @@ document
     );
 
 
+const dashboardDrawer =
+    document.getElementById("dashboardDrawer");
+
+const dashboardBackdrop =
+    document.getElementById("dashboardBackdrop");
+
+function openDashboard() {
+    dashboardDrawer.classList.add("show");
+    dashboardBackdrop.classList.add("show");
+    dashboardDrawer.setAttribute("aria-hidden", "false");
+}
+
+function closeDashboard() {
+    dashboardDrawer.classList.remove("show");
+    dashboardBackdrop.classList.remove("show");
+    dashboardDrawer.setAttribute("aria-hidden", "true");
+}
+
+document
+    .getElementById("dashboardButton")
+    .addEventListener("click", openDashboard);
+
+document
+    .getElementById("dashboardClose")
+    .addEventListener("click", closeDashboard);
+
+dashboardBackdrop.addEventListener("click", closeDashboard);
+
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+        closeDashboard();
+    }
+});
+
 document.querySelectorAll(".tab-btn").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
         const target = button.dataset.tab;
 
         document.querySelectorAll(".tab-btn").forEach(item => {
@@ -2424,10 +2600,22 @@ document.querySelectorAll(".tab-btn").forEach(button => {
             target === "account"
         );
 
+        closeDashboard();
+
         if (target === "account") {
             renderMyAccount(currentUser || {});
-            loadUsers();
+
+            try {
+                await loadUsers();
+            } catch (error) {
+                console.error(error);
+            }
         }
+
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+        });
     });
 });
 
