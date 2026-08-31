@@ -7,7 +7,67 @@ db.pragma("foreign_keys = ON");
 
 /*
 ==================================================
+KEYS
+==================================================
+*/
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        key TEXT UNIQUE NOT NULL,
+        prefix TEXT NOT NULL,
+
+        status TEXT NOT NULL DEFAULT 'unused',
+
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT,
+        last_reset_at TEXT,
+        activated_at TEXT,
+        paused_at TEXT,
+        remaining_ms INTEGER,
+
+        device_udid TEXT,
+        device_bound_at TEXT,
+        device_reset_at TEXT,
+
+        created_by_user_id INTEGER,
+
+        FOREIGN KEY (created_by_user_id)
+            REFERENCES users(id)
+            ON DELETE SET NULL
+    );
+`);
+
+/*
+==================================================
 USUÁRIOS DO PAINEL
+==================================================
+
+account_status:
+    unused   = conta criada, ainda nunca logou
+    active   = conta ativada no primeiro login
+    expired  = conta expirada
+
+account_plan:
+    1d
+    7d
+    30d
+    custom
+    lifetime
+
+duration_days:
+    NULL para lifetime
+    número de dias para os demais planos
+
+key_limit:
+    NULL = ilimitado
+    número = máximo TOTAL de keys que a conta
+    pode gerar durante a existência dela
+
+keys_generated:
+    quantidade total já gerada pela conta.
+    Deletar uma key NÃO devolve o limite.
 ==================================================
 */
 
@@ -43,35 +103,30 @@ db.exec(`
 
 /*
 ==================================================
-KEYS
+SESSÕES DE COLETA DE UDID
 ==================================================
 */
 
 db.exec(`
-    CREATE TABLE IF NOT EXISTS keys (
+    CREATE TABLE IF NOT EXISTS device_enrollments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        key TEXT UNIQUE NOT NULL,
-        prefix TEXT NOT NULL,
+        token_hash TEXT UNIQUE NOT NULL,
+        key_id INTEGER NOT NULL,
 
-        status TEXT NOT NULL DEFAULT 'unused',
+        status TEXT NOT NULL DEFAULT 'pending',
+
+        udid TEXT,
+        product TEXT,
+        ios_version TEXT,
 
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TEXT,
-        last_reset_at TEXT,
-        activated_at TEXT,
-        paused_at TEXT,
-        remaining_ms INTEGER,
+        expires_at TEXT NOT NULL,
+        completed_at TEXT,
 
-        device_udid TEXT,
-        device_bound_at TEXT,
-        device_reset_at TEXT,
-
-        created_by_user_id INTEGER,
-
-        FOREIGN KEY (created_by_user_id)
-            REFERENCES users(id)
-            ON DELETE SET NULL
+        FOREIGN KEY (key_id)
+            REFERENCES keys(id)
+            ON DELETE CASCADE
     );
 `);
 
@@ -154,6 +209,9 @@ function addColumnIfMissing(
 ==================================================
 MIGRAÇÕES DE KEYS
 ==================================================
+
+Keys antigas continuam funcionando.
+Somente adicionamos os novos campos.
 */
 
 addColumnIfMissing(
@@ -242,8 +300,14 @@ addColumnIfMissing(
 
 /*
 ==================================================
-NORMALIZAÇÃO DAS CONTAS ANTIGAS
+NORMALIZAÇÃO DE DADOS ANTIGOS
 ==================================================
+
+Contas antigas que já existiam antes deste sistema
+continuam válidas como lifetime.
+
+A conta principal "nextaway" também fica lifetime,
+ativa e sem limite de keys.
 */
 
 db.prepare(`
@@ -258,10 +322,6 @@ db.prepare(`
         END,
         keys_generated = COALESCE(keys_generated, 0)
 `).run();
-
-/*
-Conta principal protegida.
-*/
 
 db.prepare(`
     UPDATE users
@@ -313,6 +373,15 @@ db.exec(`
 
     CREATE INDEX IF NOT EXISTS idx_audit_user
     ON audit_logs(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_device_enrollments_token
+    ON device_enrollments(token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_device_enrollments_key
+    ON device_enrollments(key_id);
+
+    CREATE INDEX IF NOT EXISTS idx_device_enrollments_expires
+    ON device_enrollments(expires_at);
 `);
 
 /*
@@ -358,14 +427,14 @@ db.getUserKeyUsage = function (userId) {
         return null;
     }
 
-    const generated =
-        Number(user.keys_generated || 0);
-
     const limit =
         user.key_limit === null ||
         user.key_limit === undefined
             ? null
             : Number(user.key_limit);
+
+    const generated =
+        Number(user.keys_generated || 0);
 
     return {
         generated,
