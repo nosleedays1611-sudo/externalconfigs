@@ -463,6 +463,36 @@ select:focus{
     .header-actions{gap:5px}
     .user-badge{display:none}
 }
+
+.generated-list{
+    white-space:pre-wrap;
+    line-height:1.65;
+    max-height:280px;
+    overflow:auto;
+    text-align:left;
+}
+.account-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:10px;
+}
+.account-mini{
+    padding:10px;
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:13px;
+    background:rgba(255,255,255,.025);
+}
+.account-mini b{display:block;color:#f2f3f5;font-size:11px;margin-bottom:4px}
+.account-mini span{color:#7f858d;font-size:9px;line-height:1.45;word-break:break-word}
+.user-edit{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.user-edit .field{margin:0}
+.user-edit label{font-size:8px}
+.user-edit input,.user-edit select{padding:9px 10px;font-size:10px;border-radius:11px}
+.user-actions.four{grid-template-columns:repeat(4,1fr)}
+@media(max-width:600px){
+    .account-grid,.user-edit,.user-actions.four{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -502,6 +532,20 @@ select:focus{
 </div>
 </div>
 
+
+<div class="panel-card">
+<div class="title">MINHA CONTA</div>
+<div class="info"><span>Usuário</span><span id="meUsername">—</span></div>
+<div class="info"><span>Cargo</span><span id="meRole">—</span></div>
+<div class="info"><span>Status</span><span id="meStatus">—</span></div>
+<div class="info"><span>Plano</span><span id="mePlan">—</span></div>
+<div class="info"><span>Ativada em</span><span id="meActivated">Nunca</span></div>
+<div class="info"><span>Expira em</span><span id="meExpires">Nunca</span></div>
+<div class="info"><span>Limite de keys</span><span id="meKeyLimit">Ilimitado</span></div>
+<div class="info"><span>Keys geradas</span><span id="meKeysGenerated">0</span></div>
+<div class="info"><span>Keys restantes</span><span id="meKeysRemaining">Ilimitado</span></div>
+</div>
+
 <div class="panel-card">
 <div class="title">GERAR KEY</div>
 
@@ -522,15 +566,20 @@ select:focus{
 
 <div class="field">
 <label>PREFIXO</label>
-<input id="prefix" value="EXT" maxlength="24" autocomplete="off">
+<input id="prefix" value="EXTERNAL" maxlength="24" autocomplete="off">
+</div>
+
+<div class="field">
+<label>QUANTIDADE DE KEYS</label>
+<input id="quantity" type="number" min="1" max="100" step="1" value="1" autocomplete="off">
 </div>
 
 <button type="button" class="btn" id="generateButton">Gerar Key</button>
 
 <div class="key-result" id="generatedResult">
-<div class="generated-key" id="generatedKey">—</div>
+<div class="generated-key generated-list" id="generatedKey">—</div>
 <div class="copy-row">
-<button type="button" class="btn" id="copyButton">Copiar Key</button>
+<button type="button" class="btn" id="copyButton">Copiar</button>
 <button type="button" class="btn" id="selectButton">Selecionar</button>
 </div>
 </div>
@@ -541,7 +590,7 @@ select:focus{
 
 <div class="field">
 <label>KEY</label>
-<input id="checkInput" placeholder="EXT-IOS-XXXXX" autocomplete="off">
+<input id="checkInput" placeholder="EXTERNAL-IOS-XXXXX" autocomplete="off">
 </div>
 
 <button type="button" class="btn" id="checkButton">Consultar</button>
@@ -584,11 +633,42 @@ select:focus{
 <label>NOVO USUÁRIO</label>
 <input id="newUsername" maxlength="32" autocomplete="off" placeholder="usuario">
 </div>
+
 <div class="field">
 <label>SENHA</label>
 <input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
 </div>
-<button type="button" class="btn btn-green" id="createUserButton">Criar Usuário</button>
+
+<div class="field">
+<label>CARGO</label>
+<select id="newRole">
+<option value="user">User</option>
+<option value="owner">Owner</option>
+</select>
+</div>
+
+<div class="field">
+<label>VALIDADE DA CONTA</label>
+<select id="newAccountPlan">
+<option value="1d">1 Dia</option>
+<option value="7d">7 Dias</option>
+<option value="30d">30 Dias</option>
+<option value="custom">Personalizado</option>
+<option value="lifetime">Lifetime</option>
+</select>
+</div>
+
+<div class="field" id="newAccountCustomDaysField" style="display:none">
+<label>DIAS DA CONTA</label>
+<input id="newAccountDays" type="number" min="1" max="36500" step="1" placeholder="Ex.: 365">
+</div>
+
+<div class="field">
+<label>LIMITE TOTAL DE KEYS</label>
+<input id="newKeyLimit" type="number" min="0" step="1" placeholder="Vazio = ilimitado">
+</div>
+
+<button type="button" class="btn btn-green" id="createUserButton">Criar Conta</button>
 
 <div id="usersList" style="margin-top:18px"></div>
 </div>
@@ -604,14 +684,19 @@ select:focus{
 const API = (() => {
     const host = window.location.hostname;
     const port = window.location.port;
+
     if (host === "localhost" || host === "127.0.0.1") {
-        if (port !== "80" && port !== "") return "http://127.0.0.1:80";
+        if (port !== "80" && port !== "") {
+            return "http://127.0.0.1:80";
+        }
         return "";
     }
+
     return "";
 })();
 
 const TOKEN_KEY = "external_ios_panel_token";
+
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let currentUser = null;
 let toastTimer = null;
@@ -627,6 +712,7 @@ async function request(endpoint, options = {}, authenticated = true) {
     }
 
     let response;
+
     try {
         response = await fetch(API + endpoint, {
             ...options,
@@ -640,10 +726,14 @@ async function request(endpoint, options = {}, authenticated = true) {
 
     const text = await response.text();
     let data = {};
+
     try {
         data = text ? JSON.parse(text) : {};
     } catch {
-        data = {success:false,message:text || "Resposta inválida da API."};
+        data = {
+            success: false,
+            message: text || "Resposta inválida da API."
+        };
     }
 
     if (authenticated && response.status === 401) {
@@ -658,42 +748,92 @@ function toast(message) {
     const element = document.getElementById("toast");
     element.textContent = String(message || "");
     element.classList.add("show");
+
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => element.classList.remove("show"), 2500);
-}
-
-function formatDate(value) {
-    if (!value) return "Nunca";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleString("pt-BR");
-}
-
-function formatRemaining(ms) {
-    if (!ms || Number(ms) <= 0) return "—";
-    let seconds = Math.floor(Number(ms) / 1000);
-    const days = Math.floor(seconds / 86400); seconds %= 86400;
-    const hours = Math.floor(seconds / 3600); seconds %= 3600;
-    const minutes = Math.floor(seconds / 60); seconds %= 60;
-    const parts = [];
-    if (days) parts.push(days + "d");
-    if (hours) parts.push(hours + "h");
-    if (minutes) parts.push(minutes + "m");
-    if (!parts.length) parts.push(seconds + "s");
-    return parts.join(" ");
-}
-
-function statusText(status) {
-    return ({unused:"NÃO ATIVADA",active:"ATIVA",paused:"PAUSADA",expired:"EXPIRADA"})[status] || status || "—";
+    toastTimer = setTimeout(
+        () => element.classList.remove("show"),
+        2500
+    );
 }
 
 function escapeHtml(value) {
     return String(value ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function formatDate(value) {
+    if (!value) return "Nunca";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
+
+    return date.toLocaleString("pt-BR");
+}
+
+function formatRemaining(ms) {
+    if (!ms || Number(ms) <= 0) {
+        return "—";
+    }
+
+    let seconds = Math.floor(Number(ms) / 1000);
+
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+
+    const parts = [];
+
+    if (days) parts.push(days + "d");
+    if (hours) parts.push(hours + "h");
+    if (minutes) parts.push(minutes + "m");
+    if (!parts.length) parts.push(seconds + "s");
+
+    return parts.join(" ");
+}
+
+function statusText(status) {
+    return ({
+        unused: "NÃO ATIVADA",
+        active: "ATIVA",
+        paused: "PAUSADA",
+        expired: "EXPIRADA"
+    })[status] || status || "—";
+}
+
+function accountStatusText(status) {
+    return ({
+        unused: "NÃO ATIVADA",
+        active: "ATIVA",
+        expired: "EXPIRADA"
+    })[status] || status || "—";
+}
+
+function accountPlanText(user) {
+    if (!user) return "—";
+
+    if (user.account_plan === "lifetime") {
+        return "LIFETIME";
+    }
+
+    if (user.account_plan === "custom") {
+        return user.duration_days
+            ? user.duration_days + " dias"
+            : "PERSONALIZADO";
+    }
+
+    return String(user.account_plan || "—").toUpperCase();
 }
 
 function clearSession() {
@@ -708,14 +848,72 @@ function showLogin() {
     document.getElementById("ownerCard").style.display = "none";
 }
 
+function renderMyAccount(user) {
+    document.getElementById("meUsername").textContent =
+        user.username || "—";
+
+    document.getElementById("meRole").textContent =
+        String(user.role || "user").toUpperCase();
+
+    document.getElementById("meStatus").textContent =
+        accountStatusText(user.account_status);
+
+    document.getElementById("mePlan").textContent =
+        accountPlanText(user);
+
+    document.getElementById("meActivated").textContent =
+        formatDate(user.activated_at);
+
+    document.getElementById("meExpires").textContent =
+        user.account_plan === "lifetime"
+            ? "Lifetime"
+            : formatDate(user.expires_at);
+
+    document.getElementById("meKeyLimit").textContent =
+        user.unlimited_keys || user.key_limit === null
+            ? "Ilimitado"
+            : String(user.key_limit);
+
+    document.getElementById("meKeysGenerated").textContent =
+        String(user.keys_generated ?? 0);
+
+    document.getElementById("meKeysRemaining").textContent =
+        user.unlimited_keys || user.keys_remaining === null
+            ? "Ilimitado"
+            : String(user.keys_remaining);
+}
+
 function showPanel(user) {
     currentUser = user;
+
     document.getElementById("auth").style.display = "none";
     document.getElementById("panel").style.display = "block";
+
     document.getElementById("currentUser").textContent =
-        user.username + (user.role === "owner" ? " • OWNER" : "");
+        user.username +
+        (user.role === "owner" ? " • OWNER" : " • USER");
+
     document.getElementById("ownerCard").style.display =
-        user.role === "owner" ? "block" : "none";
+        user.role === "owner"
+            ? "block"
+            : "none";
+
+    renderMyAccount(user);
+}
+
+async function refreshMe() {
+    const {response, data} =
+        await request("/api/auth/me");
+
+    if (!response.ok || !data.success) {
+        throw new Error(
+            data.message ||
+            "Não foi possível atualizar a conta."
+        );
+    }
+
+    showPanel(data.user);
+    return data.user;
 }
 
 async function restoreSession() {
@@ -723,385 +921,1410 @@ async function restoreSession() {
         showLogin();
         return;
     }
+
     try {
-        const {response, data} = await request("/api/auth/me");
-        if (!response.ok || !data.success) throw new Error();
-        showPanel(data.user);
+        const user = await refreshMe();
+
         await loadKeys();
-        if (data.user.role === "owner") await loadUsers();
+
+        if (user.role === "owner") {
+            await loadUsers();
+        }
     } catch {
         clearSession();
         showLogin();
     }
 }
 
-document.getElementById("loginForm").addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = document.getElementById("loginButton");
-    const message = document.getElementById("loginMessage");
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
+document
+    .getElementById("loginForm")
+    .addEventListener(
+        "submit",
+        async event => {
+            event.preventDefault();
 
-    message.textContent = "";
-    message.className = "message";
-    button.disabled = true;
-    button.textContent = "Entrando...";
+            const button =
+                document.getElementById("loginButton");
 
-    try {
-        const {response, data} = await request("/api/auth/login", {
-            method:"POST",
-            body:JSON.stringify({username,password})
-        }, false);
+            const message =
+                document.getElementById("loginMessage");
 
-        if (!response.ok || !data.success || !data.token) {
-            throw new Error(data.message || "Falha no login.");
+            const username =
+                document.getElementById("username")
+                    .value
+                    .trim();
+
+            const password =
+                document.getElementById("password")
+                    .value;
+
+            message.textContent = "";
+            message.className = "message";
+
+            button.disabled = true;
+            button.textContent = "Entrando...";
+
+            try {
+                const {response, data} =
+                    await request(
+                        "/api/auth/login",
+                        {
+                            method: "POST",
+                            body: JSON.stringify({
+                                username,
+                                password
+                            })
+                        },
+                        false
+                    );
+
+                if (
+                    !response.ok ||
+                    !data.success ||
+                    !data.token
+                ) {
+                    throw new Error(
+                        data.message ||
+                        "Falha no login."
+                    );
+                }
+
+                token = data.token;
+
+                localStorage.setItem(
+                    TOKEN_KEY,
+                    token
+                );
+
+                document.getElementById("password").value = "";
+
+                showPanel(data.user);
+
+                await loadKeys();
+
+                if (data.user.role === "owner") {
+                    await loadUsers();
+                }
+
+            } catch (error) {
+                message.textContent = error.message;
+                message.className = "message error";
+
+            } finally {
+                button.disabled = false;
+                button.textContent = "Entrar";
+            }
         }
+    );
 
-        token = data.token;
-        localStorage.setItem(TOKEN_KEY, token);
-        document.getElementById("password").value = "";
-        showPanel(data.user);
-        await loadKeys();
-        if (data.user.role === "owner") await loadUsers();
-    } catch (error) {
-        message.textContent = error.message;
-        message.className = "message error";
-    } finally {
-        button.disabled = false;
-        button.textContent = "Entrar";
-    }
-});
+document
+    .getElementById("logoutButton")
+    .addEventListener(
+        "click",
+        async () => {
+            try {
+                if (token) {
+                    await request(
+                        "/api/auth/logout",
+                        {method: "POST"}
+                    );
+                }
+            } catch {}
 
-document.getElementById("logoutButton").addEventListener("click", async () => {
-    try {
-        if (token) await request("/api/auth/logout", {method:"POST"});
-    } catch {}
-    clearSession();
-    showLogin();
-});
-
-document.getElementById("duration").addEventListener("change", () => {
-    document.getElementById("customDaysField").style.display =
-        document.getElementById("duration").value === "custom" ? "block" : "none";
-});
-
-document.getElementById("generateButton").addEventListener("click", async () => {
-    const button = document.getElementById("generateButton");
-    const prefixInput = document.getElementById("prefix");
-    const plan = document.getElementById("duration").value;
-    const prefix = prefixInput.value.trim();
-
-    if (!prefix || !/^[A-Za-z0-9_-]{1,24}$/.test(prefix)) {
-        toast("Prefixo inválido.");
-        prefixInput.focus();
-        return;
-    }
-
-    const body = {prefix, plan};
-    if (plan === "custom") {
-        const days = Number(document.getElementById("customDays").value);
-        if (!Number.isInteger(days) || days <= 0) {
-            toast("Informe uma quantidade de dias válida.");
-            return;
+            clearSession();
+            showLogin();
         }
-        body.days = days;
-    }
+    );
 
-    button.disabled = true;
-    button.textContent = "Gerando...";
-    try {
-        const {response, data} = await request("/api/keys/generate", {
-            method:"POST",
-            body:JSON.stringify(body)
-        });
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao gerar key.");
-        document.getElementById("generatedKey").textContent = data.key;
-        document.getElementById("generatedResult").classList.add("show");
-        document.getElementById("checkInput").value = data.key;
-        toast("Key gerada com sucesso.");
-        await loadKeys();
-    } catch (error) {
-        toast(error.message);
-    } finally {
-        button.disabled = false;
-        button.textContent = "Gerar Key";
-    }
-});
+document
+    .getElementById("duration")
+    .addEventListener(
+        "change",
+        () => {
+            document
+                .getElementById("customDaysField")
+                .style.display =
+                    document.getElementById("duration").value === "custom"
+                        ? "block"
+                        : "none";
+        }
+    );
 
-document.getElementById("copyButton").addEventListener("click", async () => {
-    const key = document.getElementById("generatedKey").textContent.trim();
-    if (!key || key === "—") return toast("Nenhuma key gerada.");
-    try {
-        await navigator.clipboard.writeText(key);
-        toast("Key copiada.");
-    } catch {
-        toast("Não foi possível copiar automaticamente.");
-    }
-});
+document
+    .getElementById("newAccountPlan")
+    .addEventListener(
+        "change",
+        () => {
+            document
+                .getElementById("newAccountCustomDaysField")
+                .style.display =
+                    document.getElementById("newAccountPlan").value === "custom"
+                        ? "block"
+                        : "none";
+        }
+    );
 
-document.getElementById("selectButton").addEventListener("click", () => {
-    const element = document.getElementById("generatedKey");
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    toast("Key selecionada.");
-});
+/*
+==================================================
+GERAR KEYS
+==================================================
+*/
+
+document
+    .getElementById("generateButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const button =
+                document.getElementById("generateButton");
+
+            const prefixInput =
+                document.getElementById("prefix");
+
+            const plan =
+                document.getElementById("duration").value;
+
+            const prefix =
+                prefixInput.value.trim();
+
+            const quantity =
+                Number(
+                    document.getElementById("quantity").value
+                );
+
+            if (
+                !prefix ||
+                !/^[A-Za-z0-9_-]{1,24}$/.test(prefix)
+            ) {
+                toast("Prefixo inválido.");
+                prefixInput.focus();
+                return;
+            }
+
+            if (
+                !Number.isInteger(quantity) ||
+                quantity < 1 ||
+                quantity > 100
+            ) {
+                toast("A quantidade deve ser entre 1 e 100.");
+                return;
+            }
+
+            const body = {
+                prefix,
+                plan,
+                quantity
+            };
+
+            if (plan === "custom") {
+                const days =
+                    Number(
+                        document.getElementById("customDays").value
+                    );
+
+                if (
+                    !Number.isInteger(days) ||
+                    days <= 0
+                ) {
+                    toast(
+                        "Informe uma quantidade de dias válida."
+                    );
+                    return;
+                }
+
+                body.days = days;
+            }
+
+            button.disabled = true;
+            button.textContent =
+                quantity === 1
+                    ? "Gerando..."
+                    : "Gerando " + quantity + "...";
+
+            try {
+                const {response, data} =
+                    await request(
+                        "/api/keys/generate",
+                        {
+                            method: "POST",
+                            body: JSON.stringify(body)
+                        }
+                    );
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+                    throw new Error(
+                        data.message ||
+                        "Erro ao gerar key."
+                    );
+                }
+
+                const keys =
+                    Array.isArray(data.keys) &&
+                    data.keys.length
+                        ? data.keys
+                        : data.key
+                            ? [data.key]
+                            : [];
+
+                if (!keys.length) {
+                    throw new Error(
+                        "A API não retornou nenhuma key."
+                    );
+                }
+
+                document.getElementById("generatedKey").textContent =
+                    keys.join("\n");
+
+                document.getElementById("generatedResult")
+                    .classList
+                    .add("show");
+
+                document.getElementById("checkInput").value =
+                    keys[0];
+
+                toast(
+                    keys.length === 1
+                        ? "Key gerada com sucesso."
+                        : keys.length + " keys geradas com sucesso."
+                );
+
+                await refreshMe();
+                await loadKeys();
+
+            } catch (error) {
+                toast(error.message);
+
+            } finally {
+                button.disabled = false;
+                button.textContent = "Gerar Key";
+            }
+        }
+    );
+
+document
+    .getElementById("copyButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const value =
+                document.getElementById("generatedKey")
+                    .textContent
+                    .trim();
+
+            if (!value || value === "—") {
+                return toast("Nenhuma key gerada.");
+            }
+
+            try {
+                await navigator.clipboard.writeText(value);
+                toast("Copiado.");
+            } catch {
+                toast(
+                    "Não foi possível copiar automaticamente."
+                );
+            }
+        }
+    );
+
+document
+    .getElementById("selectButton")
+    .addEventListener(
+        "click",
+        () => {
+            const element =
+                document.getElementById("generatedKey");
+
+            const range =
+                document.createRange();
+
+            range.selectNodeContents(element);
+
+            const selection =
+                window.getSelection();
+
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            toast("Selecionado.");
+        }
+    );
+
+/*
+==================================================
+CONSULTAR KEY
+==================================================
+*/
 
 function updateButtons(data) {
-    document.getElementById("pauseKeyButton").disabled = data.status !== "active";
-    document.getElementById("resumeKeyButton").disabled = data.status !== "paused";
-    document.getElementById("resetUdidButton").disabled = !data.device_bound;
+    document.getElementById("pauseKeyButton").disabled =
+        data.status !== "active";
+
+    document.getElementById("resumeKeyButton").disabled =
+        data.status !== "paused";
+
+    document.getElementById("resetUdidButton").disabled =
+        !data.device_bound;
 }
 
 async function checkKey() {
-    const key = document.getElementById("checkInput").value.trim();
-    if (!key) return toast("Digite uma key.");
+    const key =
+        document.getElementById("checkInput")
+            .value
+            .trim();
 
-    const button = document.getElementById("checkButton");
+    if (!key) {
+        return toast("Digite uma key.");
+    }
+
+    const button =
+        document.getElementById("checkButton");
+
     button.disabled = true;
     button.textContent = "Consultando...";
 
     try {
-        const {response, data} = await request("/api/keys/check", {
-            method:"POST",
-            body:JSON.stringify({key})
-        }, false);
+        const {response, data} =
+            await request(
+                "/api/keys/check",
+                {
+                    method: "POST",
+                    body: JSON.stringify({key})
+                },
+                false
+            );
 
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao consultar key.");
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message ||
+                "Erro ao consultar key."
+            );
+        }
+
         if (!data.found) {
-            document.getElementById("checkResult").style.display = "none";
+            document.getElementById("checkResult")
+                .style.display = "none";
+
             return toast("Key não encontrada.");
         }
 
-        document.getElementById("checkStatus").textContent = statusText(data.status);
-        document.getElementById("checkPrefix").textContent = data.prefix || "—";
-        document.getElementById("checkDays").textContent = data.days ? String(data.days) : "—";
+        document.getElementById("checkStatus").textContent =
+            statusText(data.status);
+
+        document.getElementById("checkPrefix").textContent =
+            data.prefix || "—";
+
+        document.getElementById("checkDays").textContent =
+            data.days
+                ? String(data.days)
+                : "—";
+
         document.getElementById("checkDuration").textContent =
-            data.days ? data.days + (data.days === 1 ? " dia" : " dias") : "—";
-        document.getElementById("checkCreated").textContent = formatDate(data.created_at);
-        document.getElementById("checkActivated").textContent = formatDate(data.activated_at);
-        document.getElementById("checkExpires").textContent = formatDate(data.expires_at);
-        document.getElementById("checkPaused").textContent = formatDate(data.paused_at);
-        document.getElementById("checkRemaining").textContent = formatRemaining(data.remaining_ms);
-        document.getElementById("checkDevice").textContent = data.device_bound ? "Vinculado" : "Não vinculado";
-        document.getElementById("checkDeviceBoundAt").textContent = formatDate(data.device_bound_at);
-        document.getElementById("checkResult").style.display = "block";
+            data.days
+                ? data.days +
+                    (data.days === 1 ? " dia" : " dias")
+                : "—";
+
+        document.getElementById("checkCreated").textContent =
+            formatDate(data.created_at);
+
+        document.getElementById("checkActivated").textContent =
+            formatDate(data.activated_at);
+
+        document.getElementById("checkExpires").textContent =
+            formatDate(data.expires_at);
+
+        document.getElementById("checkPaused").textContent =
+            formatDate(data.paused_at);
+
+        document.getElementById("checkRemaining").textContent =
+            formatRemaining(data.remaining_ms);
+
+        document.getElementById("checkDevice").textContent =
+            data.device_bound
+                ? "Vinculado"
+                : "Não vinculado";
+
+        document.getElementById("checkDeviceBoundAt").textContent =
+            formatDate(data.device_bound_at);
+
+        document.getElementById("checkResult")
+            .style.display = "block";
+
         updateButtons(data);
         toast("Key consultada.");
+
     } catch (error) {
-        document.getElementById("checkResult").style.display = "none";
+        document.getElementById("checkResult")
+            .style.display = "none";
+
         toast(error.message);
+
     } finally {
         button.disabled = false;
         button.textContent = "Consultar";
     }
 }
 
-document.getElementById("checkButton").addEventListener("click", checkKey);
-document.getElementById("checkInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") checkKey();
-});
+document
+    .getElementById("checkButton")
+    .addEventListener(
+        "click",
+        checkKey
+    );
 
-async function manageKey(endpoint, method, successMessage) {
-    const key = document.getElementById("checkInput").value.trim();
-    if (!key) return toast("Consulte uma key primeiro.");
+document
+    .getElementById("checkInput")
+    .addEventListener(
+        "keydown",
+        event => {
+            if (event.key === "Enter") {
+                checkKey();
+            }
+        }
+    );
 
-    const {response, data} = await request(endpoint, {
-        method,
-        body:JSON.stringify({key})
-    });
+async function manageKey(
+    endpoint,
+    method,
+    successMessage
+) {
+    const key =
+        document.getElementById("checkInput")
+            .value
+            .trim();
 
-    if (!response.ok || !data.success) throw new Error(data.message || "Operação não realizada.");
+    if (!key) {
+        return toast(
+            "Consulte uma key primeiro."
+        );
+    }
+
+    const {response, data} =
+        await request(
+            endpoint,
+            {
+                method,
+                body: JSON.stringify({key})
+            }
+        );
+
+    if (
+        !response.ok ||
+        !data.success
+    ) {
+        throw new Error(
+            data.message ||
+            "Operação não realizada."
+        );
+    }
+
     toast(successMessage);
+
     await checkKey();
     await loadKeys();
 }
 
-document.getElementById("resetKeyButton").addEventListener("click", async () => {
-    if (!confirm("Resetar esta key? O status voltará para NÃO ATIVADA. O UDID continuará vinculado.")) return;
-    try { await manageKey("/api/keys/reset","POST","Key resetada."); }
-    catch (e) { toast(e.message); }
-});
+document
+    .getElementById("resetKeyButton")
+    .addEventListener(
+        "click",
+        async () => {
+            if (
+                !confirm(
+                    "Resetar esta key? O status voltará para NÃO ATIVADA. O UDID continuará vinculado."
+                )
+            ) {
+                return;
+            }
 
-document.getElementById("resetUdidButton").addEventListener("click", async () => {
-    if (!confirm("Resetar somente o UDID desta key? O dispositivo atual será desvinculado.")) return;
-    try { await manageKey("/api/keys/device/reset","POST","UDID resetado."); }
-    catch (e) { toast(e.message); }
-});
+            try {
+                await manageKey(
+                    "/api/keys/reset",
+                    "POST",
+                    "Key resetada."
+                );
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
 
-document.getElementById("pauseKeyButton").addEventListener("click", async () => {
-    if (!confirm("Pausar esta key? O tempo restante será preservado.")) return;
-    try { await manageKey("/api/keys/pause","POST","Key pausada."); }
-    catch (e) { toast(e.message); }
-});
+document
+    .getElementById("resetUdidButton")
+    .addEventListener(
+        "click",
+        async () => {
+            if (
+                !confirm(
+                    "Resetar somente o UDID desta key?"
+                )
+            ) {
+                return;
+            }
 
-document.getElementById("resumeKeyButton").addEventListener("click", async () => {
-    try { await manageKey("/api/keys/resume","POST","Key retomada."); }
-    catch (e) { toast(e.message); }
-});
+            try {
+                await manageKey(
+                    "/api/keys/device/reset",
+                    "POST",
+                    "UDID resetado."
+                );
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
 
-document.getElementById("deleteKeyButton").addEventListener("click", async () => {
-    const key = document.getElementById("checkInput").value.trim();
-    if (!key) return toast("Consulte uma key primeiro.");
-    if (!confirm("Excluir esta key permanentemente?")) return;
+document
+    .getElementById("pauseKeyButton")
+    .addEventListener(
+        "click",
+        async () => {
+            if (
+                !confirm(
+                    "Pausar esta key? O tempo restante será preservado."
+                )
+            ) {
+                return;
+            }
 
-    try {
-        const {response, data} = await request("/api/keys/delete", {
-            method:"DELETE",
-            body:JSON.stringify({key})
-        });
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao excluir key.");
-        document.getElementById("checkResult").style.display = "none";
-        document.getElementById("checkInput").value = "";
-        toast("Key excluída.");
-        await loadKeys();
-    } catch (error) {
-        toast(error.message);
-    }
-});
+            try {
+                await manageKey(
+                    "/api/keys/pause",
+                    "POST",
+                    "Key pausada."
+                );
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
+
+document
+    .getElementById("resumeKeyButton")
+    .addEventListener(
+        "click",
+        async () => {
+            try {
+                await manageKey(
+                    "/api/keys/resume",
+                    "POST",
+                    "Key retomada."
+                );
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
+
+document
+    .getElementById("deleteKeyButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const key =
+                document.getElementById("checkInput")
+                    .value
+                    .trim();
+
+            if (!key) {
+                return toast(
+                    "Consulte uma key primeiro."
+                );
+            }
+
+            if (
+                !confirm(
+                    "Excluir esta key permanentemente?"
+                )
+            ) {
+                return;
+            }
+
+            try {
+                const {response, data} =
+                    await request(
+                        "/api/keys/delete",
+                        {
+                            method: "DELETE",
+                            body: JSON.stringify({key})
+                        }
+                    );
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+                    throw new Error(
+                        data.message ||
+                        "Erro ao excluir key."
+                    );
+                }
+
+                document.getElementById("checkResult")
+                    .style.display = "none";
+
+                document.getElementById("checkInput").value = "";
+
+                toast("Key excluída.");
+
+                await loadKeys();
+
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
+
+/*
+==================================================
+LISTAR KEYS
+==================================================
+*/
 
 async function loadKeys() {
-    const container = document.getElementById("keysList");
-    container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando...</div>';
+    const container =
+        document.getElementById("keysList");
+
+    container.innerHTML =
+        '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando...</div>';
 
     try {
-        const {response, data} = await request("/api/keys");
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao listar keys.");
+        const {response, data} =
+            await request(
+                "/api/keys"
+            );
 
-        if (!data.keys || !data.keys.length) {
-            container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message ||
+                "Erro ao listar keys."
+            );
+        }
+
+        if (
+            !data.keys ||
+            !data.keys.length
+        ) {
+            container.innerHTML =
+                '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
+
             return;
         }
 
-        container.innerHTML = data.keys.map(key => `
-            <div class="list-item">
-                <div class="list-key" data-key="${escapeHtml(key.key)}">${escapeHtml(key.key)}</div>
-                <div class="list-meta">
-                    <span>${escapeHtml(statusText(key.status))}</span>
-                    <span>${key.days ? escapeHtml(key.days + (key.days === 1 ? " dia" : " dias")) : "—"}</span>
-                    <span>${key.device_bound ? "UDID VINCULADO" : "SEM UDID"}</span>
-                </div>
-            </div>
-        `).join("");
+        container.innerHTML =
+            data.keys
+                .map(
+                    key => `
+                        <div class="list-item">
+                            <div class="list-key" data-key="${escapeHtml(key.key)}">
+                                ${escapeHtml(key.key)}
+                            </div>
 
-        container.querySelectorAll(".list-key").forEach(element => {
-            element.addEventListener("click", async () => {
-                document.getElementById("checkInput").value = element.dataset.key;
-                await checkKey();
-                document.getElementById("checkInput").scrollIntoView({behavior:"smooth",block:"center"});
-            });
-        });
+                            <div class="list-meta">
+                                <span>${escapeHtml(statusText(key.status))}</span>
+
+                                <span>
+                                    ${
+                                        key.days
+                                            ? escapeHtml(
+                                                key.days +
+                                                (key.days === 1 ? " dia" : " dias")
+                                            )
+                                            : "—"
+                                    }
+                                </span>
+
+                                <span>
+                                    ${
+                                        key.device_bound
+                                            ? "UDID VINCULADO"
+                                            : "SEM UDID"
+                                    }
+                                </span>
+
+                                ${
+                                    key.created_by_username
+                                        ? `<span>POR ${escapeHtml(key.created_by_username)}</span>`
+                                        : ""
+                                }
+                            </div>
+                        </div>
+                    `
+                )
+                .join("");
+
+        container
+            .querySelectorAll(".list-key")
+            .forEach(
+                element => {
+                    element.addEventListener(
+                        "click",
+                        async () => {
+                            document.getElementById("checkInput").value =
+                                element.dataset.key;
+
+                            await checkKey();
+
+                            document.getElementById("checkInput")
+                                .scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center"
+                                });
+                        }
+                    );
+                }
+            );
+
     } catch (error) {
-        container.innerHTML = '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
-            escapeHtml(error.message || "Erro ao carregar keys.") + '</div>';
+        container.innerHTML =
+            '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
+            escapeHtml(
+                error.message ||
+                "Erro ao carregar keys."
+            ) +
+            '</div>';
     }
 }
 
-document.getElementById("listButton").addEventListener("click", loadKeys);
+document
+    .getElementById("listButton")
+    .addEventListener(
+        "click",
+        loadKeys
+    );
+
+/*
+==================================================
+ADMIN USUÁRIOS
+==================================================
+*/
+
+function userDetailsHtml(user) {
+    const unlimited =
+        user.unlimited_keys ||
+        user.key_limit === null;
+
+    return `
+        <div class="account-grid">
+            <div class="account-mini">
+                <b>STATUS</b>
+                <span>${escapeHtml(accountStatusText(user.account_status))}</span>
+            </div>
+
+            <div class="account-mini">
+                <b>PLANO</b>
+                <span>${escapeHtml(accountPlanText(user))}</span>
+            </div>
+
+            <div class="account-mini">
+                <b>ATIVADA</b>
+                <span>${escapeHtml(formatDate(user.activated_at))}</span>
+            </div>
+
+            <div class="account-mini">
+                <b>EXPIRA</b>
+                <span>${
+                    user.account_plan === "lifetime"
+                        ? "Lifetime"
+                        : escapeHtml(formatDate(user.expires_at))
+                }</span>
+            </div>
+
+            <div class="account-mini">
+                <b>KEYS</b>
+                <span>
+                    ${Number(user.keys_generated || 0)} geradas /
+                    ${unlimited ? "ilimitado" : Number(user.key_limit)}
+                </span>
+            </div>
+
+            <div class="account-mini">
+                <b>RESTANTES</b>
+                <span>
+                    ${
+                        unlimited
+                            ? "Ilimitado"
+                            : Number(user.keys_remaining ?? 0)
+                    }
+                </span>
+            </div>
+
+            <div class="account-mini">
+                <b>CRIADA POR</b>
+                <span>${escapeHtml(user.created_by || "—")}</span>
+            </div>
+
+            <div class="account-mini">
+                <b>ÚLTIMO LOGIN</b>
+                <span>${escapeHtml(formatDate(user.last_login_at))}</span>
+            </div>
+        </div>
+    `;
+}
+
+function editControlsHtml(user) {
+    if (user.master_owner) {
+        return `
+            <div class="user-role" style="margin-top:10px">
+                MASTER OWNER • PROTEGIDO
+            </div>
+        `;
+    }
+
+    const limit =
+        user.key_limit === null ||
+        user.key_limit === undefined
+            ? ""
+            : Number(user.key_limit);
+
+    return `
+        <div class="user-edit">
+            <div class="field">
+                <label>CARGO</label>
+                <select class="edit-role" data-id="${Number(user.id)}">
+                    <option value="user" ${user.role === "user" ? "selected" : ""}>User</option>
+                    <option value="owner" ${user.role === "owner" ? "selected" : ""}>Owner</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>PLANO</label>
+                <select class="edit-plan" data-id="${Number(user.id)}">
+                    <option value="1d" ${user.account_plan === "1d" ? "selected" : ""}>1 Dia</option>
+                    <option value="7d" ${user.account_plan === "7d" ? "selected" : ""}>7 Dias</option>
+                    <option value="30d" ${user.account_plan === "30d" ? "selected" : ""}>30 Dias</option>
+                    <option value="custom" ${user.account_plan === "custom" ? "selected" : ""}>Personalizado</option>
+                    <option value="lifetime" ${user.account_plan === "lifetime" ? "selected" : ""}>Lifetime</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>DIAS CUSTOM</label>
+                <input
+                    class="edit-days"
+                    data-id="${Number(user.id)}"
+                    type="number"
+                    min="1"
+                    max="36500"
+                    value="${user.duration_days || ""}"
+                    placeholder="Somente custom"
+                >
+            </div>
+
+            <div class="field">
+                <label>LIMITE DE KEYS</label>
+                <input
+                    class="edit-limit"
+                    data-id="${Number(user.id)}"
+                    type="number"
+                    min="0"
+                    value="${limit}"
+                    placeholder="Vazio = ilimitado"
+                >
+            </div>
+        </div>
+
+        <div class="user-actions four">
+            <button
+                class="btn user-save"
+                data-id="${Number(user.id)}"
+            >
+                Salvar
+            </button>
+
+            <button
+                class="btn user-status"
+                data-id="${Number(user.id)}"
+                data-enabled="${user.enabled ? "1" : "0"}"
+            >
+                ${user.enabled ? "Desativar" : "Ativar"}
+            </button>
+
+            <button
+                class="btn user-password"
+                data-id="${Number(user.id)}"
+            >
+                Nova Senha
+            </button>
+
+            <button
+                class="btn btn-danger user-delete"
+                data-id="${Number(user.id)}"
+            >
+                Excluir
+            </button>
+        </div>
+    `;
+}
 
 async function loadUsers() {
-    if (!currentUser || currentUser.role !== "owner") return;
-    const container = document.getElementById("usersList");
-    container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando usuários...</div>';
+    if (
+        !currentUser ||
+        currentUser.role !== "owner"
+    ) {
+        return;
+    }
+
+    const container =
+        document.getElementById("usersList");
+
+    container.innerHTML =
+        '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando usuários...</div>';
 
     try {
-        const {response, data} = await request("/api/admin/users");
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao listar usuários.");
+        const {response, data} =
+            await request(
+                "/api/admin/users"
+            );
 
-        container.innerHTML = data.users.map(user => `
-            <div class="user-row">
-                <div class="user-top">
-                    <div>
-                        <div class="user-name">${escapeHtml(user.username)}</div>
-                        <div class="user-role">${escapeHtml(user.role)} • ${user.enabled ? "ATIVO" : "DESATIVADO"}</div>
-                    </div>
-                    <div class="user-role">#${Number(user.id)}</div>
-                </div>
-                ${user.role === "owner" ? "" : `
-                <div class="user-actions">
-                    <button class="btn user-status" data-id="${Number(user.id)}" data-enabled="${user.enabled ? "1" : "0"}">
-                        ${user.enabled ? "Desativar" : "Ativar"}
-                    </button>
-                    <button class="btn user-password" data-id="${Number(user.id)}">Nova Senha</button>
-                    <button class="btn btn-danger user-delete" data-id="${Number(user.id)}">Excluir</button>
-                </div>`}
-            </div>
-        `).join("");
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+            throw new Error(
+                data.message ||
+                "Erro ao listar usuários."
+            );
+        }
 
-        container.querySelectorAll(".user-status").forEach(btn => btn.addEventListener("click", async () => {
-            const id = Number(btn.dataset.id);
-            const enabled = btn.dataset.enabled !== "1";
-            try {
-                const {response, data} = await request("/api/admin/users/status", {
-                    method:"POST", body:JSON.stringify({id,enabled})
-                });
-                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao alterar usuário.");
-                toast(enabled ? "Usuário ativado." : "Usuário desativado.");
-                await loadUsers();
-            } catch (e) { toast(e.message); }
-        }));
+        container.innerHTML =
+            data.users
+                .map(
+                    user => `
+                        <div class="user-row">
+                            <div class="user-top">
+                                <div>
+                                    <div class="user-name">
+                                        ${escapeHtml(user.username)}
+                                    </div>
 
-        container.querySelectorAll(".user-password").forEach(btn => btn.addEventListener("click", async () => {
-            const id = Number(btn.dataset.id);
-            const password = prompt("Digite a nova senha (mínimo 8 caracteres):");
-            if (password === null) return;
-            if (password.length < 8) return toast("A senha precisa ter pelo menos 8 caracteres.");
-            try {
-                const {response, data} = await request("/api/admin/users/password", {
-                    method:"POST", body:JSON.stringify({id,password})
-                });
-                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao alterar senha.");
-                toast("Senha alterada.");
-            } catch (e) { toast(e.message); }
-        }));
+                                    <div class="user-role">
+                                        ${escapeHtml(String(user.role).toUpperCase())}
+                                        •
+                                        ${user.enabled ? "HABILITADO" : "DESATIVADO"}
+                                    </div>
+                                </div>
 
-        container.querySelectorAll(".user-delete").forEach(btn => btn.addEventListener("click", async () => {
-            const id = Number(btn.dataset.id);
-            if (!confirm("Excluir este usuário permanentemente?")) return;
-            try {
-                const {response, data} = await request("/api/admin/users/delete", {
-                    method:"DELETE", body:JSON.stringify({id})
-                });
-                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao excluir usuário.");
-                toast("Usuário excluído.");
-                await loadUsers();
-            } catch (e) { toast(e.message); }
-        }));
+                                <div class="user-role">
+                                    #${Number(user.id)}
+                                </div>
+                            </div>
+
+                            ${userDetailsHtml(user)}
+                            ${editControlsHtml(user)}
+                        </div>
+                    `
+                )
+                .join("");
+
+        bindUserActions(container);
+
     } catch (error) {
-        container.innerHTML = '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
-            escapeHtml(error.message || "Erro ao carregar usuários.") + '</div>';
+        container.innerHTML =
+            '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
+            escapeHtml(
+                error.message ||
+                "Erro ao carregar usuários."
+            ) +
+            '</div>';
     }
 }
 
-document.getElementById("createUserButton").addEventListener("click", async () => {
-    const username = document.getElementById("newUsername").value.trim();
-    const password = document.getElementById("newPassword").value;
+function bindUserActions(container) {
+    container
+        .querySelectorAll(".user-save")
+        .forEach(
+            button => button.addEventListener(
+                "click",
+                async () => {
+                    const id =
+                        Number(button.dataset.id);
 
-    if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) return toast("Nome de usuário inválido.");
-    if (password.length < 8) return toast("A senha precisa ter pelo menos 8 caracteres.");
+                    const role =
+                        container.querySelector(
+                            `.edit-role[data-id="${id}"]`
+                        ).value;
 
-    try {
-        const {response, data} = await request("/api/admin/users/create", {
-            method:"POST",
-            body:JSON.stringify({username,password})
-        });
-        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao criar usuário.");
-        document.getElementById("newUsername").value = "";
-        document.getElementById("newPassword").value = "";
-        toast("Usuário criado com sucesso.");
-        await loadUsers();
-    } catch (error) {
-        toast(error.message);
-    }
-});
+                    const account_plan =
+                        container.querySelector(
+                            `.edit-plan[data-id="${id}"]`
+                        ).value;
 
-document.getElementById("refreshButton").addEventListener("click", async () => {
-    await loadKeys();
-    if (currentUser && currentUser.role === "owner") await loadUsers();
-    toast("Painel atualizado.");
-});
+                    const daysInput =
+                        container.querySelector(
+                            `.edit-days[data-id="${id}"]`
+                        );
+
+                    const limitInput =
+                        container.querySelector(
+                            `.edit-limit[data-id="${id}"]`
+                        );
+
+                    const body = {
+                        id,
+                        role,
+                        account_plan,
+                        key_limit:
+                            limitInput.value.trim() === ""
+                                ? null
+                                : Number(limitInput.value)
+                    };
+
+                    if (account_plan === "custom") {
+                        const days =
+                            Number(daysInput.value);
+
+                        if (
+                            !Number.isInteger(days) ||
+                            days <= 0
+                        ) {
+                            return toast(
+                                "Informe os dias do plano personalizado."
+                            );
+                        }
+
+                        body.duration_days = days;
+                        body.days = days;
+                    }
+
+                    try {
+                        const {response, data} =
+                            await request(
+                                "/api/admin/users/update",
+                                {
+                                    method: "POST",
+                                    body: JSON.stringify(body)
+                                }
+                            );
+
+                        if (
+                            !response.ok ||
+                            !data.success
+                        ) {
+                            throw new Error(
+                                data.message ||
+                                "Erro ao atualizar conta."
+                            );
+                        }
+
+                        toast("Conta atualizada.");
+                        await loadUsers();
+
+                    } catch (error) {
+                        toast(error.message);
+                    }
+                }
+            )
+        );
+
+    container
+        .querySelectorAll(".user-status")
+        .forEach(
+            button => button.addEventListener(
+                "click",
+                async () => {
+                    const id =
+                        Number(button.dataset.id);
+
+                    const enabled =
+                        button.dataset.enabled !== "1";
+
+                    try {
+                        const {response, data} =
+                            await request(
+                                "/api/admin/users/status",
+                                {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                        id,
+                                        enabled
+                                    })
+                                }
+                            );
+
+                        if (
+                            !response.ok ||
+                            !data.success
+                        ) {
+                            throw new Error(
+                                data.message ||
+                                "Erro ao alterar usuário."
+                            );
+                        }
+
+                        toast(
+                            enabled
+                                ? "Usuário ativado."
+                                : "Usuário desativado."
+                        );
+
+                        await loadUsers();
+
+                    } catch (error) {
+                        toast(error.message);
+                    }
+                }
+            )
+        );
+
+    container
+        .querySelectorAll(".user-password")
+        .forEach(
+            button => button.addEventListener(
+                "click",
+                async () => {
+                    const id =
+                        Number(button.dataset.id);
+
+                    const password =
+                        prompt(
+                            "Digite a nova senha (mínimo 8 caracteres):"
+                        );
+
+                    if (password === null) {
+                        return;
+                    }
+
+                    if (password.length < 8) {
+                        return toast(
+                            "A senha precisa ter pelo menos 8 caracteres."
+                        );
+                    }
+
+                    try {
+                        const {response, data} =
+                            await request(
+                                "/api/admin/users/password",
+                                {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                        id,
+                                        password
+                                    })
+                                }
+                            );
+
+                        if (
+                            !response.ok ||
+                            !data.success
+                        ) {
+                            throw new Error(
+                                data.message ||
+                                "Erro ao alterar senha."
+                            );
+                        }
+
+                        toast("Senha alterada.");
+
+                    } catch (error) {
+                        toast(error.message);
+                    }
+                }
+            )
+        );
+
+    container
+        .querySelectorAll(".user-delete")
+        .forEach(
+            button => button.addEventListener(
+                "click",
+                async () => {
+                    const id =
+                        Number(button.dataset.id);
+
+                    if (
+                        !confirm(
+                            "Excluir este usuário permanentemente?"
+                        )
+                    ) {
+                        return;
+                    }
+
+                    try {
+                        const {response, data} =
+                            await request(
+                                "/api/admin/users/delete",
+                                {
+                                    method: "DELETE",
+                                    body: JSON.stringify({id})
+                                }
+                            );
+
+                        if (
+                            !response.ok ||
+                            !data.success
+                        ) {
+                            throw new Error(
+                                data.message ||
+                                "Erro ao excluir usuário."
+                            );
+                        }
+
+                        toast("Usuário excluído.");
+                        await loadUsers();
+
+                    } catch (error) {
+                        toast(error.message);
+                    }
+                }
+            )
+        );
+}
+
+/*
+==================================================
+CRIAR CONTA
+==================================================
+*/
+
+document
+    .getElementById("createUserButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const username =
+                document.getElementById("newUsername")
+                    .value
+                    .trim();
+
+            const password =
+                document.getElementById("newPassword")
+                    .value;
+
+            const role =
+                document.getElementById("newRole")
+                    .value;
+
+            const account_plan =
+                document.getElementById("newAccountPlan")
+                    .value;
+
+            const keyLimitRaw =
+                document.getElementById("newKeyLimit")
+                    .value
+                    .trim();
+
+            if (
+                !/^[a-zA-Z0-9_.-]{3,32}$/.test(username)
+            ) {
+                return toast(
+                    "Nome de usuário inválido."
+                );
+            }
+
+            if (password.length < 8) {
+                return toast(
+                    "A senha precisa ter pelo menos 8 caracteres."
+                );
+            }
+
+            const body = {
+                username,
+                password,
+                role,
+                account_plan,
+                key_limit:
+                    keyLimitRaw === ""
+                        ? null
+                        : Number(keyLimitRaw)
+            };
+
+            if (account_plan === "custom") {
+                const days =
+                    Number(
+                        document.getElementById("newAccountDays").value
+                    );
+
+                if (
+                    !Number.isInteger(days) ||
+                    days <= 0
+                ) {
+                    return toast(
+                        "Informe os dias da conta."
+                    );
+                }
+
+                body.duration_days = days;
+                body.days = days;
+            }
+
+            try {
+                const {response, data} =
+                    await request(
+                        "/api/admin/users/create",
+                        {
+                            method: "POST",
+                            body: JSON.stringify(body)
+                        }
+                    );
+
+                if (
+                    !response.ok ||
+                    !data.success
+                ) {
+                    throw new Error(
+                        data.message ||
+                        "Erro ao criar usuário."
+                    );
+                }
+
+                document.getElementById("newUsername").value = "";
+                document.getElementById("newPassword").value = "";
+                document.getElementById("newRole").value = "user";
+                document.getElementById("newAccountPlan").value = "1d";
+                document.getElementById("newAccountDays").value = "";
+                document.getElementById("newKeyLimit").value = "";
+                document.getElementById("newAccountCustomDaysField").style.display = "none";
+
+                toast("Conta criada com sucesso.");
+                await loadUsers();
+
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
+
+/*
+==================================================
+REFRESH
+==================================================
+*/
+
+document
+    .getElementById("refreshButton")
+    .addEventListener(
+        "click",
+        async () => {
+            try {
+                const user =
+                    await refreshMe();
+
+                await loadKeys();
+
+                if (
+                    user &&
+                    user.role === "owner"
+                ) {
+                    await loadUsers();
+                }
+
+                toast("Painel atualizado.");
+
+            } catch (error) {
+                toast(error.message);
+            }
+        }
+    );
 
 restoreSession();
 </script>
