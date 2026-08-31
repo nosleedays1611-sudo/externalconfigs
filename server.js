@@ -15,6 +15,8 @@ const PUBLIC_URL =
 const MASTER_OWNER = "nextaway";
 const SESSION_HOURS = 24;
 const MAX_KEYS_PER_REQUEST = 100;
+const DEVICE_ENROLLMENT_MINUTES = 10;
+const DEVICE_FETCHER_CACHE_LIMIT = 500;
 
 app.use(cors({
     origin: true,
@@ -125,6 +127,187 @@ function checkKeyExpiration(keyData) {
     }
 
     return keyData.status;
+}
+
+
+function createDeviceEnrollmentSession(keyData) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashToken(token);
+
+    const expiresAt = new Date(
+        Date.now() +
+        DEVICE_ENROLLMENT_MINUTES * 60 * 1000
+    ).toISOString();
+
+    db.prepare(`
+        DELETE FROM device_enrollments
+        WHERE key_id = ?
+          AND status = 'pending'
+    `).run(keyData.id);
+
+    db.prepare(`
+        INSERT INTO device_enrollments (
+            token_hash,
+            key_id,
+            status,
+            expires_at
+        )
+        VALUES (?, ?, 'pending', ?)
+    `).run(
+        tokenHash,
+        keyData.id,
+        expiresAt
+    );
+
+    return {
+        token,
+        expiresAt
+    };
+}
+
+function getDeviceEnrollment(token) {
+    return db.prepare(`
+        SELECT
+            device_enrollments.*,
+            keys.key,
+            keys.status AS key_status,
+            keys.expires_at AS key_expires_at,
+            keys.last_reset_at,
+            keys.device_udid
+        FROM device_enrollments
+        INNER JOIN keys
+            ON keys.id = device_enrollments.key_id
+        WHERE device_enrollments.token_hash = ?
+    `).get(
+        hashToken(token)
+    );
+}
+
+function enrollmentIsExpired(enrollment) {
+    return (
+        !enrollment ||
+        new Date(enrollment.expires_at).getTime() <= Date.now()
+    );
+}
+
+function deviceValue(device, ...names) {
+    if (!device || typeof device !== "object") {
+        return "";
+    }
+
+    for (const name of names) {
+        const value = device[name];
+
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim()
+        ) {
+            return String(value).trim();
+        }
+    }
+
+    return "";
+}
+
+function activateKeyAfterDeviceEnrollment(keyData, udid) {
+    const fresh = getKey(keyData.key);
+
+    if (!fresh) {
+        throw new Error("Key não encontrada");
+    }
+
+    const status = checkKeyExpiration(fresh);
+
+    if (status === "expired") {
+        throw new Error("Key expirada");
+    }
+
+    if (status === "paused") {
+        throw new Error("Key pausada");
+    }
+
+    if (fresh.device_udid) {
+        if (
+            normalizeUDID(fresh.device_udid) !==
+            normalizeUDID(udid)
+        ) {
+            const error = new Error(
+                "Key usada em outro dispositivo."
+            );
+
+            error.code = "DEVICE_MISMATCH";
+            throw error;
+        }
+    } else {
+        const boundAt = nowISO();
+
+        const update = db.prepare(`
+            UPDATE keys
+            SET
+                device_udid = ?,
+                device_bound_at = ?,
+                device_reset_at = NULL
+            WHERE id = ?
+              AND device_udid IS NULL
+        `).run(
+            normalizeUDID(udid),
+            boundAt,
+            fresh.id
+        );
+
+        if (update.changes !== 1) {
+            const latest = getKey(fresh.key);
+
+            if (
+                latest &&
+                latest.device_udid &&
+                normalizeUDID(latest.device_udid) !==
+                    normalizeUDID(udid)
+            ) {
+                const error = new Error(
+                    "Key usada em outro dispositivo."
+                );
+
+                error.code = "DEVICE_MISMATCH";
+                throw error;
+            }
+        }
+    }
+
+    if (status === "unused") {
+        const days = getDaysFromKey(fresh);
+
+        if (
+            !Number.isInteger(days) ||
+            days <= 0
+        ) {
+            throw new Error(
+                "Plano da key inválido"
+            );
+        }
+
+        const activatedAt = nowISO();
+        const expiresAt =
+            calculateExpiration(days);
+
+        db.prepare(`
+            UPDATE keys
+            SET
+                status = 'active',
+                activated_at = ?,
+                expires_at = ?,
+                paused_at = NULL,
+                remaining_ms = NULL
+            WHERE id = ?
+        `).run(
+            activatedAt,
+            expiresAt,
+            fresh.id
+        );
+    }
+
+    return getKey(fresh.key);
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -1916,6 +2099,11 @@ app.post(
                 keyData.id
             );
 
+            db.prepare(`
+                DELETE FROM device_enrollments
+                WHERE key_id = ?
+            `).run(keyData.id);
+
             logAction(
                 req.user.id,
                 "reset_udid",
@@ -2223,6 +2411,508 @@ app.get(
                     "Erro interno ao listar keys"
             });
         }
+    }
+);
+
+
+/* =========================================================
+   UDID S0N1C - INICIAR SESSÃO
+========================================================= */
+
+app.post(
+    "/api/device/session",
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            if (!key) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key não informada"
+                });
+            }
+
+            const keyData = getKey(key);
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Key não encontrada"
+                });
+            }
+
+            const status =
+                checkKeyExpiration(keyData);
+
+            if (status === "expired") {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key expirada"
+                });
+            }
+
+            if (status === "paused") {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key pausada"
+                });
+            }
+
+            const session =
+                createDeviceEnrollmentSession(
+                    keyData
+                );
+
+            return res.json({
+                success: true,
+                token: session.token,
+                expires_at:
+                    session.expiresAt,
+                start_url:
+                    `${PUBLIC_URL}/device/session/` +
+                    `${encodeURIComponent(session.token)}/enroll`
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro criando sessão UDID:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Erro interno ao criar sessão UDID"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   UDID S0N1C - STATUS DA SESSÃO
+========================================================= */
+
+app.post(
+    "/api/device/session/status",
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            const token =
+                String(req.body.token || "").trim();
+
+            if (!key || !token) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Key e token são obrigatórios"
+                });
+            }
+
+            const enrollment =
+                getDeviceEnrollment(token);
+
+            if (
+                !enrollment ||
+                enrollment.key !== key
+            ) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "Sessão UDID não encontrada"
+                });
+            }
+
+            if (enrollmentIsExpired(enrollment)) {
+                return res.status(410).json({
+                    success: false,
+                    expired: true,
+                    message:
+                        "Sessão UDID expirada"
+                });
+            }
+
+            const keyData =
+                getKey(enrollment.key);
+
+            return res.json({
+                success: true,
+                completed:
+                    enrollment.status ===
+                    "completed",
+                device_bound:
+                    Boolean(
+                        keyData &&
+                        keyData.device_udid
+                    ),
+                key_status:
+                    keyData
+                        ? checkKeyExpiration(
+                              keyData
+                          )
+                        : null
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro consultando sessão UDID:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Erro interno ao consultar sessão UDID"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   UDID S0N1C - MIDDLEWARE
+========================================================= */
+
+let UDIDFetcherClassPromise = null;
+const deviceFetcherCache = new Map();
+
+function getUDIDFetcherClass() {
+    if (!UDIDFetcherClassPromise) {
+        UDIDFetcherClassPromise =
+            import("udid-fetcher")
+                .then(module => {
+                    const exported =
+                        module.default ||
+                        module.UDIDFetcher ||
+                        module;
+
+                    if (
+                        typeof exported !==
+                        "function"
+                    ) {
+                        throw new Error(
+                            "Export de udid-fetcher inválido"
+                        );
+                    }
+
+                    return exported;
+                });
+    }
+
+    return UDIDFetcherClassPromise;
+}
+
+function trimDeviceFetcherCache() {
+    while (
+        deviceFetcherCache.size >
+        DEVICE_FETCHER_CACHE_LIMIT
+    ) {
+        const firstKey =
+            deviceFetcherCache.keys().next().value;
+
+        if (!firstKey) {
+            break;
+        }
+
+        deviceFetcherCache.delete(firstKey);
+    }
+}
+
+app.use(
+    "/device/session/:token",
+    async (req, res, next) => {
+        try {
+            const token =
+                String(
+                    req.params.token || ""
+                ).trim();
+
+            const enrollment =
+                getDeviceEnrollment(token);
+
+            if (!enrollment) {
+                return res.status(404).send(
+                    "Sessão UDID não encontrada."
+                );
+            }
+
+            if (enrollmentIsExpired(enrollment)) {
+                deviceFetcherCache.delete(token);
+
+                return res.status(410).send(
+                    "Sessão UDID expirada. Volte ao app e tente novamente."
+                );
+            }
+
+            const UDIDFetcher =
+                await getUDIDFetcherClass();
+
+            let fetcher =
+                deviceFetcherCache.get(token);
+
+            if (!fetcher) {
+                const baseURL =
+                    `${PUBLIC_URL}/device/session/` +
+                    `${encodeURIComponent(token)}/`;
+
+                fetcher = new UDIDFetcher({
+                    name: "EXTERNAL Device",
+                    description:
+                        "Vincula este iPhone à sua licença.",
+                    identifier:
+                        "app.external.device",
+                    organization:
+                        "EXTERNAL",
+                    apiURL: baseURL,
+                    query: {
+                        token
+                    },
+                    done: (
+                        callbackReq,
+                        callbackRes
+                    ) => {
+                        try {
+                            const callbackToken =
+                                String(
+                                    callbackReq.query
+                                        .token || ""
+                                ).trim();
+
+                            if (
+                                callbackToken !==
+                                token
+                            ) {
+                                return callbackRes
+                                    .status(400)
+                                    .send(
+                                        "Token de sessão inválido."
+                                    );
+                            }
+
+                            const latestEnrollment =
+                                getDeviceEnrollment(
+                                    token
+                                );
+
+                            if (
+                                !latestEnrollment ||
+                                enrollmentIsExpired(
+                                    latestEnrollment
+                                )
+                            ) {
+                                deviceFetcherCache.delete(
+                                    token
+                                );
+
+                                return callbackRes
+                                    .status(410)
+                                    .send(
+                                        "Sessão UDID expirada."
+                                    );
+                            }
+
+                            if (
+                                latestEnrollment.status ===
+                                "completed"
+                            ) {
+                                return callbackRes.redirect(
+                                    302,
+                                    `${PUBLIC_URL}/device/success?token=` +
+                                    encodeURIComponent(
+                                        token
+                                    )
+                                );
+                            }
+
+                            const device =
+                                callbackReq.device ||
+                                {};
+
+                            const udid =
+                                normalizeUDID(
+                                    deviceValue(
+                                        device,
+                                        "udid",
+                                        "UDID",
+                                        "Udid"
+                                    )
+                                );
+
+                            const product =
+                                deviceValue(
+                                    device,
+                                    "product",
+                                    "PRODUCT",
+                                    "model",
+                                    "MODEL"
+                                );
+
+                            const iosVersion =
+                                deviceValue(
+                                    device,
+                                    "version",
+                                    "VERSION",
+                                    "iosVersion",
+                                    "OS_VERSION"
+                                );
+
+                            if (
+                                !udid ||
+                                !validUDID(udid)
+                            ) {
+                                console.error(
+                                    "Resposta UDID inválida:",
+                                    device
+                                );
+
+                                return callbackRes
+                                    .status(400)
+                                    .send(
+                                        "Não foi possível obter um UDID válido."
+                                    );
+                            }
+
+                            const keyData =
+                                getKey(
+                                    latestEnrollment
+                                        .key
+                                );
+
+                            activateKeyAfterDeviceEnrollment(
+                                keyData,
+                                udid
+                            );
+
+                            db.prepare(`
+                                UPDATE device_enrollments
+                                SET
+                                    status = 'completed',
+                                    udid = ?,
+                                    product = ?,
+                                    ios_version = ?,
+                                    completed_at = ?
+                                WHERE id = ?
+                                  AND status = 'pending'
+                            `).run(
+                                udid,
+                                product || null,
+                                iosVersion || null,
+                                nowISO(),
+                                latestEnrollment.id
+                            );
+
+                            deviceFetcherCache.delete(
+                                token
+                            );
+
+                            return callbackRes.redirect(
+                                302,
+                                `${PUBLIC_URL}/device/success?token=` +
+                                encodeURIComponent(
+                                    token
+                                )
+                            );
+
+                        } catch (error) {
+                            console.error(
+                                "Erro finalizando UDID:",
+                                error
+                            );
+
+                            if (
+                                error &&
+                                error.code ===
+                                    "DEVICE_MISMATCH"
+                            ) {
+                                return callbackRes
+                                    .status(403)
+                                    .send(
+                                        "Essa key já está vinculada a outro dispositivo."
+                                    );
+                            }
+
+                            return callbackRes
+                                .status(500)
+                                .send(
+                                    "Não foi possível vincular o dispositivo."
+                                );
+                        }
+                    }
+                });
+
+                deviceFetcherCache.set(
+                    token,
+                    fetcher
+                );
+
+                trimDeviceFetcherCache();
+            }
+
+            return fetcher.router(
+                req,
+                res,
+                next
+            );
+
+        } catch (error) {
+            console.error(
+                "Erro no UDID Fetcher:",
+                error
+            );
+
+            return res.status(500).send(
+                "Serviço de UDID indisponível."
+            );
+        }
+    }
+);
+
+/* =========================================================
+   UDID S0N1C - PÁGINA DE SUCESSO
+========================================================= */
+
+app.get(
+    "/device/success",
+    (req, res) => {
+        const token =
+            String(req.query.token || "").trim();
+
+        const enrollment =
+            token
+                ? getDeviceEnrollment(token)
+                : null;
+
+        const completed =
+            Boolean(
+                enrollment &&
+                enrollment.status === "completed"
+            );
+
+        return res
+            .status(completed ? 200 : 400)
+            .type("html")
+            .send(`<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EXTERNAL</title>
+<style>
+html,body{margin:0;min-height:100%;background:#090909;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Arial,sans-serif}
+body{display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+.card{width:min(420px,100%);padding:28px;border:1px solid rgba(255,255,255,.16);border-radius:28px;background:rgba(255,255,255,.07);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:0 24px 80px rgba(0,0,0,.45);text-align:center}
+h1{font-size:24px;margin:0 0 10px}
+p{margin:0;color:rgba(255,255,255,.68);line-height:1.45}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>${completed ? "Dispositivo vinculado" : "Sessão inválida"}</h1>
+<p>${completed ? "Volte para o aplicativo para continuar." : "Volte para o aplicativo e gere uma nova sessão de UDID."}</p>
+</div>
+</body>
+</html>`);
     }
 );
 
