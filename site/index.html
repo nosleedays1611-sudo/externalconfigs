@@ -6,44 +6,500 @@
 <meta name="theme-color" content="#0d0d0d">
 <title>GENERATOR EXTERNAL IOS</title>
 <style>
+:root{
+    --bg:#050607;
+    --bg-2:#0a0c0f;
+    --glass:rgba(20,22,26,.48);
+    --glass-strong:rgba(24,27,32,.68);
+    --glass-soft:rgba(255,255,255,.035);
+    --border:rgba(255,255,255,.11);
+    --border-strong:rgba(255,255,255,.18);
+    --white:#f7f8fa;
+    --muted:#8b9098;
+    --green:#6dffb2;
+    --red:#ff7582;
+    --shadow:0 24px 80px rgba(0,0,0,.52);
+    --inner:inset 0 1px 0 rgba(255,255,255,.10);
+}
 
-:root{--bg:#0d0d0d;--card:#181818;--white:#f5f5f5;--muted:#777;--green:#00ff88;--red:#ff5c68}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;min-height:100%}
-body{background:radial-gradient(circle at 50% -10%,rgba(255,255,255,.07),transparent 35%),#0d0d0d;color:var(--white);font-family:Arial,Helvetica,sans-serif}
-button,input,select{font:inherit}button{cursor:pointer}
-.auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.card{width:100%;max-width:430px;padding:25px;background:linear-gradient(145deg,rgba(255,255,255,.035),transparent),var(--card);border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.logo{width:70px;height:70px;object-fit:cover;border-radius:18px;display:block;margin:0 auto 15px}
-h1{text-align:center;font-size:20px;margin:0 0 5px}.subtitle{text-align:center;color:var(--muted);font-size:11px;margin-bottom:25px}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:rgba(255,255,255,.04);border-radius:10px;margin-bottom:20px}
-.tab{border:0;padding:10px;color:#777;background:transparent;border-radius:8px}.tab.active{color:white;background:rgba(255,255,255,.1)}
-.form{display:none}.form.active{display:block}.field{margin-bottom:14px}
-label{display:block;margin-bottom:7px;color:#999;font-size:11px;font-weight:bold}
-input,select{width:100%;padding:13px;color:white;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;outline:none}
-select option{background:#151515}input:focus,select:focus{border-color:rgba(255,255,255,.35)}
-.btn{width:100%;padding:13px;border:1px solid rgba(255,255,255,.15);border-radius:9px;color:white;background:rgba(255,255,255,.12);font-weight:bold;margin-top:5px}.btn:hover{background:rgba(255,255,255,.2)}.btn:disabled{opacity:.5;cursor:not-allowed}
-.message{min-height:18px;text-align:center;font-size:11px;margin-top:12px}.error{color:var(--red)}.success{color:var(--green)}
-#panel{display:none;padding:25px 15px 50px}.container{max-width:850px;margin:auto}
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}.header-title{font-weight:bold}.logout{background:transparent;border:0;color:#777;font-size:20px}
-.panel-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px;margin-bottom:12px}
-.title{color:#ddd;font-size:11px;letter-spacing:1px;font-weight:bold;margin-bottom:18px}
-.key-result{display:none;margin-top:15px;padding:15px;border-radius:10px;background:rgba(0,255,136,.04);border:1px solid rgba(0,255,136,.12);text-align:center}.key-result.show{display:block}
-.generated-key{color:var(--green);font-family:monospace;font-size:15px;font-weight:bold;word-break:break-all;user-select:text}
-.copy-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}.copy-row .btn{margin-top:0}
-.info{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}.info:last-child{border-bottom:0}.info span:first-child{color:#777}.info span:last-child{text-align:right}
-.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#202020;border:1px solid rgba(255,255,255,.1);padding:10px 15px;border-radius:9px;font-size:11px;transition:.2s;z-index:9999}.toast.show{opacity:1;transform:translate(-50%,0)}
-@media(max-width:500px){.copy-row{grid-template-columns:1fr}}
 
+html{
+    background:#050607;
+}
+
+body{
+    color:var(--white);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",Inter,Arial,sans-serif;
+    min-height:100vh;
+    background:
+        radial-gradient(circle at 18% 12%,rgba(255,255,255,.075),transparent 22%),
+        radial-gradient(circle at 82% 18%,rgba(110,130,155,.08),transparent 24%),
+        radial-gradient(circle at 50% 110%,rgba(255,255,255,.055),transparent 34%),
+        linear-gradient(180deg,#08090b 0%,#050607 48%,#030405 100%);
+    background-attachment:fixed;
+    overflow-x:hidden;
+}
+
+body::before,
+body::after{
+    content:"";
+    position:fixed;
+    border-radius:999px;
+    pointer-events:none;
+    filter:blur(90px);
+    opacity:.34;
+    z-index:-2;
+}
+
+body::before{
+    width:360px;
+    height:360px;
+    top:-120px;
+    left:-90px;
+    background:rgba(255,255,255,.12);
+}
+
+body::after{
+    width:420px;
+    height:420px;
+    right:-150px;
+    bottom:-160px;
+    background:rgba(90,110,140,.13);
+}
+
+button,input,select{font:inherit}
+button{cursor:pointer}
+
+.auth{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+}
+
+.card,
+.panel-card{
+    position:relative;
+    overflow:hidden;
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.08),rgba(255,255,255,.018) 35%,rgba(255,255,255,.01)),
+        var(--glass);
+    border:1px solid var(--border);
+    box-shadow:var(--shadow),var(--inner);
+    backdrop-filter:blur(28px) saturate(145%);
+    -webkit-backdrop-filter:blur(28px) saturate(145%);
+}
+
+.card::before,
+.panel-card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+        linear-gradient(115deg,rgba(255,255,255,.09),transparent 28%,transparent 72%,rgba(255,255,255,.025));
+    opacity:.9;
+}
+
+.card{
+    width:100%;
+    max-width:430px;
+    padding:28px;
+    border-radius:26px;
+}
+
+h1{
+    position:relative;
+    z-index:1;
+    text-align:center;
+    font-size:20px;
+    letter-spacing:.2px;
+    margin:0 0 6px;
+    font-weight:700;
+}
+
+.subtitle{
+    position:relative;
+    z-index:1;
+    text-align:center;
+    color:var(--muted);
+    font-size:10px;
+    letter-spacing:1.6px;
+    margin-bottom:26px;
+}
+
+.field{
+    position:relative;
+    z-index:1;
+    margin-bottom:14px;
+}
+
+label{
+    display:block;
+    margin-bottom:7px;
+    color:#a9adb5;
+    font-size:10px;
+    letter-spacing:.8px;
+    font-weight:700;
+}
+
+input,select{
+    width:100%;
+    padding:14px 15px;
+    color:#fff;
+    background:
+        linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025)),
+        rgba(5,6,8,.34);
+    border:1px solid rgba(255,255,255,.10);
+    border-radius:14px;
+    outline:none;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.055),
+        0 8px 22px rgba(0,0,0,.12);
+    transition:.2s ease;
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+}
+
+input::placeholder{color:#5f646c}
+
+select option{
+    color:#fff;
+    background:#111318;
+}
+
+input:focus,
+select:focus{
+    border-color:rgba(255,255,255,.25);
+    background:rgba(255,255,255,.06);
+    box-shadow:
+        0 0 0 3px rgba(255,255,255,.035),
+        inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.btn{
+    position:relative;
+    z-index:1;
+    width:100%;
+    padding:13px 15px;
+    border:1px solid rgba(255,255,255,.13);
+    border-radius:14px;
+    color:#f8f9fb;
+    background:
+        linear-gradient(180deg,rgba(255,255,255,.105),rgba(255,255,255,.045));
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.10),
+        0 10px 24px rgba(0,0,0,.18);
+    font-weight:700;
+    margin-top:5px;
+    transition:transform .16s ease,background .16s ease,border-color .16s ease,box-shadow .16s ease;
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+}
+
+.btn:hover{
+    background:
+        linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.065));
+    border-color:rgba(255,255,255,.21);
+    transform:translateY(-1px);
+}
+
+.btn:active{transform:scale(.992)}
+.btn:disabled{opacity:.42;cursor:not-allowed;transform:none}
+
+.btn-danger{
+    color:#ff9aa3;
+    border-color:rgba(255,117,130,.22);
+    background:linear-gradient(180deg,rgba(255,117,130,.09),rgba(255,117,130,.025));
+}
+
+.btn-green{
+    color:#8affc3;
+    border-color:rgba(109,255,178,.18);
+    background:linear-gradient(180deg,rgba(109,255,178,.075),rgba(109,255,178,.02));
+}
+
+.message{
+    min-height:18px;
+    text-align:center;
+    font-size:11px;
+    margin-top:12px;
+}
+
+.error{color:var(--red)}
+.success{color:var(--green)}
+
+#panel{
+    display:none;
+    padding:28px 15px 56px;
+}
+
+.container{
+    max-width:880px;
+    margin:auto;
+}
+
+.header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:15px;
+    margin-bottom:16px;
+    padding:4px 4px 2px;
+}
+
+.header-title{
+    font-weight:750;
+    letter-spacing:.2px;
+}
+
+.header-actions{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.user-badge{
+    color:var(--muted);
+    font-size:10px;
+    margin-top:3px;
+    letter-spacing:.4px;
+}
+
+.icon-btn{
+    width:38px;
+    height:38px;
+    display:grid;
+    place-items:center;
+    border:1px solid rgba(255,255,255,.10);
+    border-radius:13px;
+    color:#9ba0a7;
+    font-size:20px;
+    background:rgba(255,255,255,.035);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    transition:.16s ease;
+}
+
+.icon-btn:hover{
+    color:#fff;
+    background:rgba(255,255,255,.075);
+    border-color:rgba(255,255,255,.16);
+}
+
+.panel-card{
+    border-radius:24px;
+    padding:22px;
+    margin-bottom:14px;
+}
+
+.title{
+    position:relative;
+    z-index:1;
+    color:#dfe2e7;
+    font-size:10px;
+    letter-spacing:1.45px;
+    font-weight:800;
+    margin-bottom:18px;
+}
+
+.key-result{
+    position:relative;
+    z-index:1;
+    display:none;
+    margin-top:16px;
+    padding:16px;
+    border-radius:17px;
+    background:
+        linear-gradient(180deg,rgba(109,255,178,.06),rgba(109,255,178,.015)),
+        rgba(255,255,255,.018);
+    border:1px solid rgba(109,255,178,.13);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+    text-align:center;
+}
+
+.key-result.show{display:block}
+
+.generated-key{
+    color:var(--green);
+    font-family:"SFMono-Regular",Consolas,monospace;
+    font-size:14px;
+    font-weight:700;
+    word-break:break-all;
+    user-select:text;
+    text-shadow:0 0 22px rgba(109,255,178,.14);
+}
+
+.copy-row{
+    position:relative;
+    z-index:1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:15px;
+}
+
+.copy-row .btn{margin-top:0}
+
+.info{
+    position:relative;
+    z-index:1;
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    padding:12px 2px;
+    border-bottom:1px solid rgba(255,255,255,.05);
+    font-size:12px;
+}
+
+.info:last-child{border-bottom:0}
+.info span:first-child{color:#777d85}
+.info span:last-child{text-align:right;word-break:break-all;color:#d9dce1}
+
+.list-item,
+.user-row{
+    position:relative;
+    z-index:1;
+    border-bottom:1px solid rgba(255,255,255,.055);
+    padding:13px 1px;
+}
+
+.list-item:last-child,
+.user-row:last-child{border-bottom:0}
+
+.list-key{
+    font-family:"SFMono-Regular",Consolas,monospace;
+    color:var(--green);
+    font-size:12px;
+    word-break:break-all;
+    cursor:pointer;
+}
+
+.list-key:hover{text-decoration:underline}
+
+.list-meta{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    margin-top:7px;
+    color:#747a82;
+    font-size:10px;
+    flex-wrap:wrap;
+}
+
+.owner-only{display:none}
+
+.user-top{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:center;
+}
+
+.user-name{
+    font-size:12px;
+    font-weight:750;
+    color:#eceef2;
+}
+
+.user-role{
+    font-size:10px;
+    color:#737981;
+}
+
+.user-actions{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:7px;
+    margin-top:10px;
+}
+
+.user-actions .btn{
+    font-size:10px;
+    padding:9px;
+    margin:0;
+}
+
+.toast{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translate(-50%,20px) scale(.98);
+    opacity:0;
+    pointer-events:none;
+    color:#f7f8fa;
+    background:
+        linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.03)),
+        rgba(20,22,26,.74);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 18px 45px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08);
+    backdrop-filter:blur(24px) saturate(145%);
+    -webkit-backdrop-filter:blur(24px) saturate(145%);
+    padding:11px 16px;
+    border-radius:15px;
+    font-size:11px;
+    transition:.22s ease;
+    z-index:9999;
+    max-width:90%;
+    text-align:center;
+}
+
+.toast.show{
+    opacity:1;
+    transform:translate(-50%,0) scale(1);
+}
+
+@media(max-width:500px){
+    .auth{padding:16px}
+    .card{padding:22px;border-radius:22px}
+    #panel{padding:20px 11px 45px}
+    .panel-card{padding:18px;border-radius:21px}
+    .copy-row,.user-actions{grid-template-columns:1fr}
+    .header{align-items:flex-start}
+    .header-actions{gap:5px}
+    .user-badge{display:none}
+}
 </style>
 </head>
 <body>
 
-<section id="panel" style="display:block">
+<section class="auth" id="auth">
+<div class="card">
+<h1>GENERATOR EXTERNAL IOS</h1>
+<div class="subtitle">ACESSO AO PAINEL</div>
+
+<form id="loginForm">
+<div class="field">
+<label>USUÁRIO</label>
+<input id="username" autocomplete="username" maxlength="32" required>
+</div>
+
+<div class="field">
+<label>SENHA</label>
+<input id="password" type="password" autocomplete="current-password" required>
+</div>
+
+<button class="btn" id="loginButton" type="submit">Entrar</button>
+<div class="message" id="loginMessage"></div>
+</form>
+</div>
+</section>
+
+<section id="panel">
 <div class="container">
 <div class="header">
+<div>
 <div class="header-title">GENERATOR EXTERNAL IOS</div>
-<button type="button" class="logout" id="refreshButton" title="Atualizar">↻</button>
+<div class="user-badge" id="currentUser">—</div>
+</div>
+<div class="header-actions">
+<button type="button" class="icon-btn" id="refreshButton" title="Atualizar">↻</button>
+<button type="button" class="icon-btn" id="logoutButton" title="Sair">×</button>
+</div>
 </div>
 
 <div class="panel-card">
@@ -100,27 +556,43 @@ select option{background:#151515}input:focus,select:focus{border-color:rgba(255,
 <div class="info"><span>Expira em</span><span id="checkExpires">Nunca</span></div>
 <div class="info"><span>Pausada em</span><span id="checkPaused">—</span></div>
 <div class="info"><span>Tempo restante</span><span id="checkRemaining">—</span></div>
+<div class="info"><span>Dispositivo</span><span id="checkDevice">Não vinculado</span></div>
+<div class="info"><span>Vinculado em</span><span id="checkDeviceBoundAt">Nunca</span></div>
 
 <div class="copy-row">
-<button type="button" class="btn" id="resetKeyButton">Resetar</button>
+<button type="button" class="btn" id="resetKeyButton">Resetar Key</button>
+<button type="button" class="btn" id="resetUdidButton">Resetar UDID</button>
+</div>
+<div class="copy-row">
 <button type="button" class="btn" id="pauseKeyButton">Pausar</button>
-</div>
-
-<div class="copy-row">
 <button type="button" class="btn" id="resumeKeyButton">Retomar</button>
-<button type="button" class="btn" id="deleteKeyButton">Excluir</button>
 </div>
+<button type="button" class="btn btn-danger" id="deleteKeyButton">Excluir Key</button>
 </div>
 </div>
 
 <div class="panel-card">
 <div class="title">KEYS DO BANCO</div>
 <button type="button" class="btn" id="listButton">Atualizar Lista</button>
-
 <div id="keysList" style="margin-top:15px"></div>
 </div>
 
+<div class="panel-card owner-only" id="ownerCard">
+<div class="title">ADMINISTRAÇÃO DE USUÁRIOS</div>
+
+<div class="field">
+<label>NOVO USUÁRIO</label>
+<input id="newUsername" maxlength="32" autocomplete="off" placeholder="usuario">
 </div>
+<div class="field">
+<label>SENHA</label>
+<input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+</div>
+<button type="button" class="btn btn-green" id="createUserButton">Criar Usuário</button>
+
+<div id="usersList" style="margin-top:18px"></div>
+</div>
+
 </div>
 </section>
 
@@ -129,33 +601,32 @@ select option{background:#151515}input:focus,select:focus{border-color:rgba(255,
 <script>
 "use strict";
 
-/*
- * Se o HTML estiver sendo aberto pelo Live Server,
- * usa a API em localhost:3000.
- *
- * Se o HTML estiver hospedado junto com o server.js,
- * usa a mesma origem.
- */
 const API = (() => {
     const host = window.location.hostname;
     const port = window.location.port;
-
     if (host === "localhost" || host === "127.0.0.1") {
-        if (port !== "3000") return "http://127.0.0.1:3000";
+        if (port !== "80" && port !== "") return "http://127.0.0.1:80";
         return "";
     }
-
     return "";
 })();
 
-async function request(endpoint, options={}) {
+const TOKEN_KEY = "external_ios_panel_token";
+let token = localStorage.getItem(TOKEN_KEY) || "";
+let currentUser = null;
+let toastTimer = null;
+
+async function request(endpoint, options = {}, authenticated = true) {
     const headers = {
         "Content-Type": "application/json",
         ...(options.headers || {})
     };
 
-    let response;
+    if (authenticated && token) {
+        headers.Authorization = "Bearer " + token;
+    }
 
+    let response;
     try {
         response = await fetch(API + endpoint, {
             ...options,
@@ -169,149 +640,187 @@ async function request(endpoint, options={}) {
 
     const text = await response.text();
     let data = {};
-
     try {
         data = text ? JSON.parse(text) : {};
     } catch {
-        data = {
-            success: false,
-            message: text || "Resposta inválida da API."
-        };
+        data = {success:false,message:text || "Resposta inválida da API."};
     }
 
-    return { response, data };
-}
+    if (authenticated && response.status === 401) {
+        clearSession();
+        showLogin();
+    }
 
-let toastTimer = null;
+    return {response, data};
+}
 
 function toast(message) {
     const element = document.getElementById("toast");
     element.textContent = String(message || "");
     element.classList.add("show");
-
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-        element.classList.remove("show");
-    }, 2500);
+    toastTimer = setTimeout(() => element.classList.remove("show"), 2500);
 }
 
 function formatDate(value) {
     if (!value) return "Nunca";
-
     const date = new Date(value);
-
     if (Number.isNaN(date.getTime())) return "—";
-
     return date.toLocaleString("pt-BR");
 }
 
 function formatRemaining(ms) {
-    if (!ms || ms <= 0) return "—";
-
-    let seconds = Math.floor(ms / 1000);
-
-    const days = Math.floor(seconds / 86400);
-    seconds %= 86400;
-
-    const hours = Math.floor(seconds / 3600);
-    seconds %= 3600;
-
-    const minutes = Math.floor(seconds / 60);
-    seconds %= 60;
-
+    if (!ms || Number(ms) <= 0) return "—";
+    let seconds = Math.floor(Number(ms) / 1000);
+    const days = Math.floor(seconds / 86400); seconds %= 86400;
+    const hours = Math.floor(seconds / 3600); seconds %= 3600;
+    const minutes = Math.floor(seconds / 60); seconds %= 60;
     const parts = [];
-
     if (days) parts.push(days + "d");
     if (hours) parts.push(hours + "h");
     if (minutes) parts.push(minutes + "m");
     if (!parts.length) parts.push(seconds + "s");
-
     return parts.join(" ");
 }
 
 function statusText(status) {
-    const map = {
-        unused: "NÃO ATIVADA",
-        active: "ATIVA",
-        paused: "PAUSADA",
-        expired: "EXPIRADA"
-    };
-
-    return map[status] || status || "—";
+    return ({unused:"NÃO ATIVADA",active:"ATIVA",paused:"PAUSADA",expired:"EXPIRADA"})[status] || status || "—";
 }
 
-function statusClass(status) {
-    return String(status || "").toLowerCase();
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
 }
 
-function updateButtons(data) {
-    const pause = document.getElementById("pauseKeyButton");
-    const resume = document.getElementById("resumeKeyButton");
-
-    pause.disabled = data.status !== "active";
-    resume.disabled = data.status !== "paused";
+function clearSession() {
+    token = "";
+    currentUser = null;
+    localStorage.removeItem(TOKEN_KEY);
 }
+
+function showLogin() {
+    document.getElementById("auth").style.display = "flex";
+    document.getElementById("panel").style.display = "none";
+    document.getElementById("ownerCard").style.display = "none";
+}
+
+function showPanel(user) {
+    currentUser = user;
+    document.getElementById("auth").style.display = "none";
+    document.getElementById("panel").style.display = "block";
+    document.getElementById("currentUser").textContent =
+        user.username + (user.role === "owner" ? " • OWNER" : "");
+    document.getElementById("ownerCard").style.display =
+        user.role === "owner" ? "block" : "none";
+}
+
+async function restoreSession() {
+    if (!token) {
+        showLogin();
+        return;
+    }
+    try {
+        const {response, data} = await request("/api/auth/me");
+        if (!response.ok || !data.success) throw new Error();
+        showPanel(data.user);
+        await loadKeys();
+        if (data.user.role === "owner") await loadUsers();
+    } catch {
+        clearSession();
+        showLogin();
+    }
+}
+
+document.getElementById("loginForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = document.getElementById("loginButton");
+    const message = document.getElementById("loginMessage");
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+
+    message.textContent = "";
+    message.className = "message";
+    button.disabled = true;
+    button.textContent = "Entrando...";
+
+    try {
+        const {response, data} = await request("/api/auth/login", {
+            method:"POST",
+            body:JSON.stringify({username,password})
+        }, false);
+
+        if (!response.ok || !data.success || !data.token) {
+            throw new Error(data.message || "Falha no login.");
+        }
+
+        token = data.token;
+        localStorage.setItem(TOKEN_KEY, token);
+        document.getElementById("password").value = "";
+        showPanel(data.user);
+        await loadKeys();
+        if (data.user.role === "owner") await loadUsers();
+    } catch (error) {
+        message.textContent = error.message;
+        message.className = "message error";
+    } finally {
+        button.disabled = false;
+        button.textContent = "Entrar";
+    }
+});
+
+document.getElementById("logoutButton").addEventListener("click", async () => {
+    try {
+        if (token) await request("/api/auth/logout", {method:"POST"});
+    } catch {}
+    clearSession();
+    showLogin();
+});
 
 document.getElementById("duration").addEventListener("change", () => {
-    const custom = document.getElementById("duration").value === "custom";
-    document.getElementById("customDaysField").style.display = custom ? "block" : "none";
+    document.getElementById("customDaysField").style.display =
+        document.getElementById("duration").value === "custom" ? "block" : "none";
 });
 
 document.getElementById("generateButton").addEventListener("click", async () => {
     const button = document.getElementById("generateButton");
     const prefixInput = document.getElementById("prefix");
-    const duration = document.getElementById("duration").value;
+    const plan = document.getElementById("duration").value;
     const prefix = prefixInput.value.trim();
 
-    if (!prefix) {
-        toast("Digite um prefixo.");
-        prefixInput.focus();
-        return;
-    }
-
-    if (!/^[A-Za-z0-9_-]{1,24}$/.test(prefix)) {
+    if (!prefix || !/^[A-Za-z0-9_-]{1,24}$/.test(prefix)) {
         toast("Prefixo inválido.");
         prefixInput.focus();
         return;
     }
 
-    const body = {
-        prefix,
-        plan: duration
-    };
-
-    if (duration === "custom") {
+    const body = {prefix, plan};
+    if (plan === "custom") {
         const days = Number(document.getElementById("customDays").value);
-
         if (!Number.isInteger(days) || days <= 0) {
             toast("Informe uma quantidade de dias válida.");
             return;
         }
-
         body.days = days;
     }
 
     button.disabled = true;
     button.textContent = "Gerando...";
-
     try {
-        const { response, data } = await request("/api/keys/generate", {
-            method: "POST",
-            body: JSON.stringify(body)
+        const {response, data} = await request("/api/keys/generate", {
+            method:"POST",
+            body:JSON.stringify(body)
         });
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Erro ao gerar key.");
-        }
-
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao gerar key.");
         document.getElementById("generatedKey").textContent = data.key;
         document.getElementById("generatedResult").classList.add("show");
         document.getElementById("checkInput").value = data.key;
-
         toast("Key gerada com sucesso.");
-        loadKeys();
+        await loadKeys();
     } catch (error) {
-        console.error("GENERATE:", error);
         toast(error.message);
     } finally {
         button.disabled = false;
@@ -321,12 +830,7 @@ document.getElementById("generateButton").addEventListener("click", async () => 
 
 document.getElementById("copyButton").addEventListener("click", async () => {
     const key = document.getElementById("generatedKey").textContent.trim();
-
-    if (!key || key === "—") {
-        toast("Nenhuma key gerada.");
-        return;
-    }
-
+    if (!key || key === "—") return toast("Nenhuma key gerada.");
     try {
         await navigator.clipboard.writeText(key);
         toast("Key copiada.");
@@ -338,76 +842,55 @@ document.getElementById("copyButton").addEventListener("click", async () => {
 document.getElementById("selectButton").addEventListener("click", () => {
     const element = document.getElementById("generatedKey");
     const range = document.createRange();
-
     range.selectNodeContents(element);
-
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-
     toast("Key selecionada.");
 });
 
+function updateButtons(data) {
+    document.getElementById("pauseKeyButton").disabled = data.status !== "active";
+    document.getElementById("resumeKeyButton").disabled = data.status !== "paused";
+    document.getElementById("resetUdidButton").disabled = !data.device_bound;
+}
+
 async function checkKey() {
     const key = document.getElementById("checkInput").value.trim();
-
-    if (!key) {
-        toast("Digite uma key.");
-        return;
-    }
+    if (!key) return toast("Digite uma key.");
 
     const button = document.getElementById("checkButton");
-
     button.disabled = true;
     button.textContent = "Consultando...";
 
     try {
-        const { response, data } = await request("/api/keys/check", {
-            method: "POST",
-            body: JSON.stringify({ key })
-        });
+        const {response, data} = await request("/api/keys/check", {
+            method:"POST",
+            body:JSON.stringify({key})
+        }, false);
 
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Erro ao consultar key.");
-        }
-
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao consultar key.");
         if (!data.found) {
             document.getElementById("checkResult").style.display = "none";
-            toast("Key não encontrada.");
-            return;
+            return toast("Key não encontrada.");
         }
 
         document.getElementById("checkStatus").textContent = statusText(data.status);
         document.getElementById("checkPrefix").textContent = data.prefix || "—";
-
-        const days = data.days;
-        document.getElementById("checkDays").textContent =
-            days ? String(days) : "—";
-
+        document.getElementById("checkDays").textContent = data.days ? String(data.days) : "—";
         document.getElementById("checkDuration").textContent =
-            days ? (days + (days === 1 ? " dia" : " dias")) : "—";
-
-        document.getElementById("checkCreated").textContent =
-            formatDate(data.created_at);
-
-        document.getElementById("checkActivated").textContent =
-            formatDate(data.activated_at);
-
-        document.getElementById("checkExpires").textContent =
-            formatDate(data.expires_at);
-
-        document.getElementById("checkPaused").textContent =
-            formatDate(data.paused_at);
-
-        document.getElementById("checkRemaining").textContent =
-            formatRemaining(data.remaining_ms);
-
+            data.days ? data.days + (data.days === 1 ? " dia" : " dias") : "—";
+        document.getElementById("checkCreated").textContent = formatDate(data.created_at);
+        document.getElementById("checkActivated").textContent = formatDate(data.activated_at);
+        document.getElementById("checkExpires").textContent = formatDate(data.expires_at);
+        document.getElementById("checkPaused").textContent = formatDate(data.paused_at);
+        document.getElementById("checkRemaining").textContent = formatRemaining(data.remaining_ms);
+        document.getElementById("checkDevice").textContent = data.device_bound ? "Vinculado" : "Não vinculado";
+        document.getElementById("checkDeviceBoundAt").textContent = formatDate(data.device_bound_at);
         document.getElementById("checkResult").style.display = "block";
-
         updateButtons(data);
         toast("Key consultada.");
     } catch (error) {
-        console.error("CHECK:", error);
         document.getElementById("checkResult").style.display = "none";
         toast(error.message);
     } finally {
@@ -417,89 +900,64 @@ async function checkKey() {
 }
 
 document.getElementById("checkButton").addEventListener("click", checkKey);
+document.getElementById("checkInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") checkKey();
+});
 
 async function manageKey(endpoint, method, successMessage) {
     const key = document.getElementById("checkInput").value.trim();
+    if (!key) return toast("Consulte uma key primeiro.");
 
-    if (!key) {
-        toast("Consulte uma key primeiro.");
-        return;
-    }
+    const {response, data} = await request(endpoint, {
+        method,
+        body:JSON.stringify({key})
+    });
 
-    try {
-        const { response, data } = await request(endpoint, {
-            method,
-            body: JSON.stringify({ key })
-        });
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Operação não realizada.");
-        }
-
-        toast(successMessage);
-        await checkKey();
-        await loadKeys();
-    } catch (error) {
-        console.error("KEY MANAGEMENT:", error);
-        toast(error.message);
-    }
+    if (!response.ok || !data.success) throw new Error(data.message || "Operação não realizada.");
+    toast(successMessage);
+    await checkKey();
+    await loadKeys();
 }
 
 document.getElementById("resetKeyButton").addEventListener("click", async () => {
-    if (!confirm("Resetar esta key? Ela voltará para NÃO ATIVADA e o prazo será zerado.")) return;
+    if (!confirm("Resetar esta key? O status voltará para NÃO ATIVADA. O UDID continuará vinculado.")) return;
+    try { await manageKey("/api/keys/reset","POST","Key resetada."); }
+    catch (e) { toast(e.message); }
+});
 
-    await manageKey(
-        "/api/keys/reset",
-        "POST",
-        "Key resetada."
-    );
+document.getElementById("resetUdidButton").addEventListener("click", async () => {
+    if (!confirm("Resetar somente o UDID desta key? O dispositivo atual será desvinculado.")) return;
+    try { await manageKey("/api/keys/device/reset","POST","UDID resetado."); }
+    catch (e) { toast(e.message); }
 });
 
 document.getElementById("pauseKeyButton").addEventListener("click", async () => {
     if (!confirm("Pausar esta key? O tempo restante será preservado.")) return;
-
-    await manageKey(
-        "/api/keys/pause",
-        "POST",
-        "Key pausada."
-    );
+    try { await manageKey("/api/keys/pause","POST","Key pausada."); }
+    catch (e) { toast(e.message); }
 });
 
 document.getElementById("resumeKeyButton").addEventListener("click", async () => {
-    await manageKey(
-        "/api/keys/resume",
-        "POST",
-        "Key retomada."
-    );
+    try { await manageKey("/api/keys/resume","POST","Key retomada."); }
+    catch (e) { toast(e.message); }
 });
 
 document.getElementById("deleteKeyButton").addEventListener("click", async () => {
     const key = document.getElementById("checkInput").value.trim();
-
-    if (!key) {
-        toast("Consulte uma key primeiro.");
-        return;
-    }
-
-    if (!confirm("Excluir esta key permanentemente? Esta ação não pode ser desfeita.")) return;
+    if (!key) return toast("Consulte uma key primeiro.");
+    if (!confirm("Excluir esta key permanentemente?")) return;
 
     try {
-        const { response, data } = await request("/api/keys/delete", {
-            method: "DELETE",
-            body: JSON.stringify({ key })
+        const {response, data} = await request("/api/keys/delete", {
+            method:"DELETE",
+            body:JSON.stringify({key})
         });
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Erro ao excluir key.");
-        }
-
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao excluir key.");
         document.getElementById("checkResult").style.display = "none";
         document.getElementById("checkInput").value = "";
-
         toast("Key excluída.");
-        loadKeys();
+        await loadKeys();
     } catch (error) {
-        console.error("DELETE:", error);
         toast(error.message);
     }
 });
@@ -509,40 +967,143 @@ async function loadKeys() {
     container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando...</div>';
 
     try {
-        const { response, data } = await request("/api/keys");
+        const {response, data} = await request("/api/keys");
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao listar keys.");
 
-        if (!response.ok || !data.success) {
-            throw new Error(data.message || "Erro ao listar keys.");
-        }
-
-        if (!data.keys.length) {
-            container.innerHTML =
-                '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
+        if (!data.keys || !data.keys.length) {
+            container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
             return;
         }
 
         container.innerHTML = data.keys.map(key => `
-            <div style="border-bottom:1px solid rgba(255,255,255,.06);padding:12px 0">
-                <div style="font-family:monospace;color:var(--green);font-size:12px;word-break:break-all">
-                    ${key.key}
-                </div>
-                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:7px;color:#777;font-size:10px">
-                    <span>${statusText(key.status)}</span>
-                    <span>${key.days ? key.days + (key.days === 1 ? " dia" : " dias") : "—"}</span>
+            <div class="list-item">
+                <div class="list-key" data-key="${escapeHtml(key.key)}">${escapeHtml(key.key)}</div>
+                <div class="list-meta">
+                    <span>${escapeHtml(statusText(key.status))}</span>
+                    <span>${key.days ? escapeHtml(key.days + (key.days === 1 ? " dia" : " dias")) : "—"}</span>
+                    <span>${key.device_bound ? "UDID VINCULADO" : "SEM UDID"}</span>
                 </div>
             </div>
         `).join("");
+
+        container.querySelectorAll(".list-key").forEach(element => {
+            element.addEventListener("click", async () => {
+                document.getElementById("checkInput").value = element.dataset.key;
+                await checkKey();
+                document.getElementById("checkInput").scrollIntoView({behavior:"smooth",block:"center"});
+            });
+        });
     } catch (error) {
-        console.error("LIST:", error);
-        container.innerHTML =
-            '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">Erro ao carregar keys.</div>';
+        container.innerHTML = '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
+            escapeHtml(error.message || "Erro ao carregar keys.") + '</div>';
     }
 }
 
 document.getElementById("listButton").addEventListener("click", loadKeys);
-document.getElementById("refreshButton").addEventListener("click", loadKeys);
 
-loadKeys();
+async function loadUsers() {
+    if (!currentUser || currentUser.role !== "owner") return;
+    const container = document.getElementById("usersList");
+    container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Carregando usuários...</div>';
+
+    try {
+        const {response, data} = await request("/api/admin/users");
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao listar usuários.");
+
+        container.innerHTML = data.users.map(user => `
+            <div class="user-row">
+                <div class="user-top">
+                    <div>
+                        <div class="user-name">${escapeHtml(user.username)}</div>
+                        <div class="user-role">${escapeHtml(user.role)} • ${user.enabled ? "ATIVO" : "DESATIVADO"}</div>
+                    </div>
+                    <div class="user-role">#${Number(user.id)}</div>
+                </div>
+                ${user.role === "owner" ? "" : `
+                <div class="user-actions">
+                    <button class="btn user-status" data-id="${Number(user.id)}" data-enabled="${user.enabled ? "1" : "0"}">
+                        ${user.enabled ? "Desativar" : "Ativar"}
+                    </button>
+                    <button class="btn user-password" data-id="${Number(user.id)}">Nova Senha</button>
+                    <button class="btn btn-danger user-delete" data-id="${Number(user.id)}">Excluir</button>
+                </div>`}
+            </div>
+        `).join("");
+
+        container.querySelectorAll(".user-status").forEach(btn => btn.addEventListener("click", async () => {
+            const id = Number(btn.dataset.id);
+            const enabled = btn.dataset.enabled !== "1";
+            try {
+                const {response, data} = await request("/api/admin/users/status", {
+                    method:"POST", body:JSON.stringify({id,enabled})
+                });
+                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao alterar usuário.");
+                toast(enabled ? "Usuário ativado." : "Usuário desativado.");
+                await loadUsers();
+            } catch (e) { toast(e.message); }
+        }));
+
+        container.querySelectorAll(".user-password").forEach(btn => btn.addEventListener("click", async () => {
+            const id = Number(btn.dataset.id);
+            const password = prompt("Digite a nova senha (mínimo 8 caracteres):");
+            if (password === null) return;
+            if (password.length < 8) return toast("A senha precisa ter pelo menos 8 caracteres.");
+            try {
+                const {response, data} = await request("/api/admin/users/password", {
+                    method:"POST", body:JSON.stringify({id,password})
+                });
+                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao alterar senha.");
+                toast("Senha alterada.");
+            } catch (e) { toast(e.message); }
+        }));
+
+        container.querySelectorAll(".user-delete").forEach(btn => btn.addEventListener("click", async () => {
+            const id = Number(btn.dataset.id);
+            if (!confirm("Excluir este usuário permanentemente?")) return;
+            try {
+                const {response, data} = await request("/api/admin/users/delete", {
+                    method:"DELETE", body:JSON.stringify({id})
+                });
+                if (!response.ok || !data.success) throw new Error(data.message || "Erro ao excluir usuário.");
+                toast("Usuário excluído.");
+                await loadUsers();
+            } catch (e) { toast(e.message); }
+        }));
+    } catch (error) {
+        container.innerHTML = '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
+            escapeHtml(error.message || "Erro ao carregar usuários.") + '</div>';
+    }
+}
+
+document.getElementById("createUserButton").addEventListener("click", async () => {
+    const username = document.getElementById("newUsername").value.trim();
+    const password = document.getElementById("newPassword").value;
+
+    if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) return toast("Nome de usuário inválido.");
+    if (password.length < 8) return toast("A senha precisa ter pelo menos 8 caracteres.");
+
+    try {
+        const {response, data} = await request("/api/admin/users/create", {
+            method:"POST",
+            body:JSON.stringify({username,password})
+        });
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao criar usuário.");
+        document.getElementById("newUsername").value = "";
+        document.getElementById("newPassword").value = "";
+        toast("Usuário criado com sucesso.");
+        await loadUsers();
+    } catch (error) {
+        toast(error.message);
+    }
+});
+
+document.getElementById("refreshButton").addEventListener("click", async () => {
+    await loadKeys();
+    if (currentUser && currentUser.role === "owner") await loadUsers();
+    toast("Painel atualizado.");
+});
+
+restoreSession();
 </script>
 </body>
 </html>
