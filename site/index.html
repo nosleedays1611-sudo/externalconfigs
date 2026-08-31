@@ -1077,7 +1077,8 @@ function showPanel(user) {
     document.getElementById("dashboardUser").textContent =
         userLabel;
 
-    document.getElementById("ownerCard").style.display = "block";
+    document.getElementById("ownerCard").style.display =
+        user.role === "owner" ? "block" : "none";
 
     renderMyAccount(user);
     applyAccountPermissions(user);
@@ -1086,44 +1087,23 @@ function showPanel(user) {
 
 function applyAccountPermissions(user) {
     const isOwner = user && user.role === "owner";
+    const ownerCard = document.getElementById("ownerCard");
 
-    const ownerInputs = document.querySelectorAll(
-        "#ownerCard input, #ownerCard select, #ownerCard button"
-    );
+    ownerCard.style.display = isOwner ? "block" : "none";
 
-    ownerInputs.forEach(element => {
-        if (isOwner) {
+    if (!isOwner) {
+        return;
+    }
+
+    ownerCard
+        .querySelectorAll("input, select, button")
+        .forEach(element => {
             element.disabled = false;
             element.style.opacity = "";
             element.style.cursor = "";
-        } else {
-            element.disabled = true;
-            element.style.opacity = ".42";
-            element.style.cursor = "not-allowed";
-        }
-    });
-
-    const noteId = "normalUserAdminNote";
-    let note = document.getElementById(noteId);
-
-    if (!isOwner) {
-        if (!note) {
-            note = document.createElement("div");
-            note.id = noteId;
-            note.className = "message";
-            note.style.marginBottom = "14px";
-            note.style.color = "#777d85";
-            note.textContent =
-                "A administração de usuários é somente leitura para contas user.";
-            document.getElementById("ownerCard").insertBefore(
-                note,
-                document.getElementById("ownerCard").children[1]
-            );
-        }
-    } else if (note) {
-        note.remove();
-    }
+        });
 }
+
 
 async function refreshMe() {
     const {response, data} =
@@ -2087,6 +2067,12 @@ function editControlsHtml(user) {
 }
 
 async function loadUsers() {
+    if (!currentUser || currentUser.role !== "owner") {
+        document.getElementById("ownerCard").style.display = "none";
+        document.getElementById("usersList").innerHTML = "";
+        return;
+    }
+
     if (!currentUser) {
         return;
     }
