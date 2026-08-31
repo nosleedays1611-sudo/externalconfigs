@@ -7,31 +7,6 @@ db.pragma("foreign_keys = ON");
 
 /*
 ==================================================
-KEYS
-==================================================
-*/
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS keys (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key TEXT UNIQUE NOT NULL,
-        prefix TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'unused',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TEXT,
-        last_reset_at TEXT,
-        activated_at TEXT,
-        paused_at TEXT,
-        remaining_ms INTEGER,
-
-        device_udid TEXT,
-        device_bound_at TEXT,
-        device_reset_at TEXT
-    );
-`);
-
-/*
-==================================================
 USUÁRIOS DO PAINEL
 ==================================================
 */
@@ -49,10 +24,54 @@ db.exec(`
 
         enabled INTEGER NOT NULL DEFAULT 1,
 
+        account_status TEXT NOT NULL DEFAULT 'unused',
+        account_plan TEXT NOT NULL DEFAULT 'lifetime',
+        duration_days INTEGER,
+
+        activated_at TEXT,
+        expires_at TEXT,
+
+        key_limit INTEGER,
+        keys_generated INTEGER NOT NULL DEFAULT 0,
+
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         created_by TEXT,
 
         last_login_at TEXT
+    );
+`);
+
+/*
+==================================================
+KEYS
+==================================================
+*/
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        key TEXT UNIQUE NOT NULL,
+        prefix TEXT NOT NULL,
+
+        status TEXT NOT NULL DEFAULT 'unused',
+
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT,
+        last_reset_at TEXT,
+        activated_at TEXT,
+        paused_at TEXT,
+        remaining_ms INTEGER,
+
+        device_udid TEXT,
+        device_bound_at TEXT,
+        device_reset_at TEXT,
+
+        created_by_user_id INTEGER,
+
+        FOREIGN KEY (created_by_user_id)
+            REFERENCES users(id)
+            ON DELETE SET NULL
     );
 `);
 
@@ -132,8 +151,9 @@ function addColumnIfMissing(
 }
 
 /*
-Keys antigas continuam funcionando.
-Somente adicionamos os novos campos.
+==================================================
+MIGRAÇÕES DE KEYS
+==================================================
 */
 
 addColumnIfMissing(
@@ -166,6 +186,97 @@ addColumnIfMissing(
     "TEXT"
 );
 
+addColumnIfMissing(
+    "keys",
+    "created_by_user_id",
+    "INTEGER REFERENCES users(id) ON DELETE SET NULL"
+);
+
+/*
+==================================================
+MIGRAÇÕES DE USUÁRIOS
+==================================================
+*/
+
+addColumnIfMissing(
+    "users",
+    "account_status",
+    "TEXT NOT NULL DEFAULT 'unused'"
+);
+
+addColumnIfMissing(
+    "users",
+    "account_plan",
+    "TEXT NOT NULL DEFAULT 'lifetime'"
+);
+
+addColumnIfMissing(
+    "users",
+    "duration_days",
+    "INTEGER"
+);
+
+addColumnIfMissing(
+    "users",
+    "activated_at",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "users",
+    "expires_at",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "users",
+    "key_limit",
+    "INTEGER"
+);
+
+addColumnIfMissing(
+    "users",
+    "keys_generated",
+    "INTEGER NOT NULL DEFAULT 0"
+);
+
+/*
+==================================================
+NORMALIZAÇÃO DAS CONTAS ANTIGAS
+==================================================
+*/
+
+db.prepare(`
+    UPDATE users
+    SET
+        account_plan = COALESCE(account_plan, 'lifetime'),
+        account_status = CASE
+            WHEN account_status IS NULL
+                OR account_status = ''
+            THEN 'active'
+            ELSE account_status
+        END,
+        keys_generated = COALESCE(keys_generated, 0)
+`).run();
+
+/*
+Conta principal protegida.
+*/
+
+db.prepare(`
+    UPDATE users
+    SET
+        role = 'owner',
+        enabled = 1,
+        account_status = 'active',
+        account_plan = 'lifetime',
+        duration_days = NULL,
+        activated_at = COALESCE(activated_at, created_at),
+        expires_at = NULL,
+        key_limit = NULL
+    WHERE LOWER(username) = LOWER('nextaway')
+`).run();
+
 /*
 ==================================================
 ÍNDICES
@@ -179,14 +290,29 @@ db.exec(`
     CREATE INDEX IF NOT EXISTS idx_keys_udid
     ON keys(device_udid);
 
+    CREATE INDEX IF NOT EXISTS idx_keys_created_by_user
+    ON keys(created_by_user_id);
+
     CREATE INDEX IF NOT EXISTS idx_users_username
     ON users(username);
+
+    CREATE INDEX IF NOT EXISTS idx_users_role
+    ON users(role);
+
+    CREATE INDEX IF NOT EXISTS idx_users_account_status
+    ON users(account_status);
+
+    CREATE INDEX IF NOT EXISTS idx_users_expires_at
+    ON users(expires_at);
 
     CREATE INDEX IF NOT EXISTS idx_sessions_token
     ON sessions(token_hash);
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user
     ON sessions(user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_audit_user
+    ON audit_logs(user_id);
 `);
 
 /*
@@ -213,6 +339,46 @@ db.getUserByUsername = function (username) {
     `).get(
         String(username || "").trim()
     );
+};
+
+db.getUserById = function (id) {
+    return db.prepare(`
+        SELECT *
+        FROM users
+        WHERE id = ?
+    `).get(
+        Number(id)
+    );
+};
+
+db.getUserKeyUsage = function (userId) {
+    const user = db.getUserById(userId);
+
+    if (!user) {
+        return null;
+    }
+
+    const generated =
+        Number(user.keys_generated || 0);
+
+    const limit =
+        user.key_limit === null ||
+        user.key_limit === undefined
+            ? null
+            : Number(user.key_limit);
+
+    return {
+        generated,
+        limit,
+        unlimited: limit === null,
+        remaining:
+            limit === null
+                ? null
+                : Math.max(
+                    0,
+                    limit - generated
+                )
+    };
 };
 
 db.logAction = function (
