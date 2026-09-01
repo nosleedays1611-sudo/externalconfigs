@@ -2856,14 +2856,15 @@ app.use(
             );
 
         } catch (error) {
-            console.error(
-                "Erro no UDID Fetcher:",
-                error
-            );
+            console.error("Erro no UDID Fetcher:", error);
 
-            return res.status(500).send(
-                "Serviço de UDID indisponível."
-            );
+            return res
+                .status(500)
+                .type("text/plain")
+                .send(
+                    "ERRO UDID:\n\n" +
+                    (error?.stack || error?.message || String(error))
+                );
         }
     }
 );
