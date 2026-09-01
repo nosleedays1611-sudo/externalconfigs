@@ -2637,6 +2637,330 @@ function trimDeviceFetcherCache() {
     }
 }
 
+
+function decodeProfileXmlEntity(value) {
+    return String(value || "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '\"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+}
+
+function extractProfileString(xml, key) {
+    const escapedKey = String(key)
+        .replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
+
+    const pattern = new RegExp(
+        "<key>\\\\s*" +
+        escapedKey +
+        "\\\\s*</key>\\\\s*<string>([\\\\s\\\\S]*?)</string>",
+        "i"
+    );
+
+    const match = String(xml || "").match(pattern);
+
+    return match
+        ? decodeProfileXmlEntity(match[1]).trim()
+        : "";
+}
+
+function extractDeviceFromProfileBody(body) {
+    if (!Buffer.isBuffer(body)) {
+        if (typeof body === "string") {
+            body = Buffer.from(body, "binary");
+        } else {
+            return null;
+        }
+    }
+
+    /*
+     * O iPhone pode enviar a resposta do Profile Service
+     * dentro de um envelope CMS/PKCS#7. O plist XML continua
+     * presente no payload, mas pode existir conteúdo binário
+     * antes/depois dele. Por isso não passamos o Buffer inteiro
+     * para um parser XML.
+     */
+    const raw = body.toString("latin1");
+
+    let start = raw.indexOf("<?xml");
+
+    if (start < 0) {
+        start = raw.indexOf("<plist");
+    }
+
+    const closeTag = "</plist>";
+    const closeIndex = raw.indexOf(closeTag, start);
+
+    if (start < 0 || closeIndex < 0) {
+        return null;
+    }
+
+    const xml = raw.slice(
+        start,
+        closeIndex + closeTag.length
+    );
+
+    return {
+        UDID: extractProfileString(xml, "UDID"),
+        PRODUCT:
+            extractProfileString(xml, "PRODUCT"),
+        VERSION:
+            extractProfileString(xml, "VERSION"),
+        SERIAL:
+            extractProfileString(xml, "SERIAL"),
+        IMEI:
+            extractProfileString(xml, "IMEI"),
+        ICCID:
+            extractProfileString(xml, "ICCID")
+    };
+}
+
+/*
+ * Compatibilidade com iOS atual:
+ * trata o POST /confirm antes do udid-fetcher antigo.
+ *
+ * O pacote antigo tenta analisar o corpo binário inteiro como XML,
+ * o que causa o erro do xmldom. Aqui extraímos somente o plist XML
+ * contido na resposta do Profile Service.
+ */
+app.post(
+    "/device/session/:token/confirm",
+    express.raw({
+        type: "*/*",
+        limit: "1mb"
+    }),
+    (req, res) => {
+        try {
+            const token =
+                String(req.params.token || "").trim();
+
+            const queryToken =
+                String(req.query.token || "").trim();
+
+            if (
+                queryToken &&
+                queryToken !== token
+            ) {
+                return res
+                    .status(400)
+                    .type("text/plain")
+                    .send("Token de sessão inválido.");
+            }
+
+            const enrollment =
+                getDeviceEnrollment(token);
+
+            if (!enrollment) {
+                return res
+                    .status(404)
+                    .type("text/plain")
+                    .send(
+                        "Sessão UDID não encontrada."
+                    );
+            }
+
+            if (enrollmentIsExpired(enrollment)) {
+                deviceFetcherCache.delete(token);
+
+                return res
+                    .status(410)
+                    .type("text/plain")
+                    .send(
+                        "Sessão UDID expirada. Volte ao app e tente novamente."
+                    );
+            }
+
+            if (
+                enrollment.status ===
+                "completed"
+            ) {
+                return res.redirect(
+                    302,
+                    `${PUBLIC_URL}/device/success?token=` +
+                    encodeURIComponent(token)
+                );
+            }
+
+            const body =
+                Buffer.isBuffer(req.body)
+                    ? req.body
+                    : Buffer.alloc(0);
+
+            console.log(
+                "UDID confirm recebido:",
+                {
+                    token:
+                        token.slice(0, 8) + "...",
+                    contentType:
+                        req.headers[
+                            "content-type"
+                        ] || null,
+                    bytes: body.length
+                }
+            );
+
+            const device =
+                extractDeviceFromProfileBody(body);
+
+            if (!device) {
+                console.error(
+                    "Não foi possível localizar plist XML no retorno UDID.",
+                    {
+                        contentType:
+                            req.headers[
+                                "content-type"
+                            ] || null,
+                        bytes: body.length
+                    }
+                );
+
+                return res
+                    .status(400)
+                    .type("text/plain")
+                    .send(
+                        "Resposta do dispositivo não pôde ser processada."
+                    );
+            }
+
+            const udid =
+                normalizeUDID(device.UDID);
+
+            const product =
+                String(
+                    device.PRODUCT || ""
+                ).trim();
+
+            const iosVersion =
+                String(
+                    device.VERSION || ""
+                ).trim();
+
+            if (
+                !udid ||
+                !validUDID(udid)
+            ) {
+                console.error(
+                    "Resposta UDID sem UDID válido:",
+                    {
+                        product,
+                        version: iosVersion,
+                        hasUDID:
+                            Boolean(device.UDID)
+                    }
+                );
+
+                return res
+                    .status(400)
+                    .type("text/plain")
+                    .send(
+                        "Não foi possível obter um UDID válido."
+                    );
+            }
+
+            const latestEnrollment =
+                getDeviceEnrollment(token);
+
+            if (
+                !latestEnrollment ||
+                enrollmentIsExpired(
+                    latestEnrollment
+                )
+            ) {
+                deviceFetcherCache.delete(token);
+
+                return res
+                    .status(410)
+                    .type("text/plain")
+                    .send(
+                        "Sessão UDID expirada."
+                    );
+            }
+
+            const keyData =
+                getKey(latestEnrollment.key);
+
+            if (!keyData) {
+                return res
+                    .status(404)
+                    .type("text/plain")
+                    .send(
+                        "Key da sessão não encontrada."
+                    );
+            }
+
+            activateKeyAfterDeviceEnrollment(
+                keyData,
+                udid
+            );
+
+            db.prepare(`
+                UPDATE device_enrollments
+                SET
+                    status = 'completed',
+                    udid = ?,
+                    product = ?,
+                    ios_version = ?,
+                    completed_at = ?
+                WHERE id = ?
+                  AND status = 'pending'
+            `).run(
+                udid,
+                product || null,
+                iosVersion || null,
+                nowISO(),
+                latestEnrollment.id
+            );
+
+            deviceFetcherCache.delete(token);
+
+            console.log(
+                "UDID vinculado com sucesso:",
+                {
+                    enrollmentId:
+                        latestEnrollment.id,
+                    product:
+                        product || null,
+                    version:
+                        iosVersion || null
+                }
+            );
+
+            return res.redirect(
+                302,
+                `${PUBLIC_URL}/device/success?token=` +
+                encodeURIComponent(token)
+            );
+
+        } catch (error) {
+            console.error(
+                "Erro no confirm UDID:",
+                error
+            );
+
+            if (
+                error &&
+                error.code ===
+                    "DEVICE_MISMATCH"
+            ) {
+                return res
+                    .status(403)
+                    .type("text/plain")
+                    .send(
+                        "Essa key já está vinculada a outro dispositivo."
+                    );
+            }
+
+            return res
+                .status(500)
+                .type("text/plain")
+                .send(
+                    "Não foi possível vincular o dispositivo."
+                );
+        }
+    }
+);
+
 app.use(
     "/device/session/:token",
     async (req, res, next) => {
