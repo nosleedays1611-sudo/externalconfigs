@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
 const forge = require("node-forge");
+const { execFileSync } = require("child_process");
 const db = require("./database");
 
 const app = express();
@@ -2650,19 +2651,22 @@ function decodeProfileXmlEntity(value) {
 
 function extractProfileString(xml, key) {
     const escapedKey = String(key)
-        .replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     const pattern = new RegExp(
-        "<key>\\\\s*" +
+        "<key>\\s*" +
         escapedKey +
-        "\\\\s*</key>\\\\s*<string>([\\\\s\\\\S]*?)</string>",
+        "\\s*</key>\\s*<string>([\\s\\S]*?)</string>",
         "i"
     );
 
-    const match = String(xml || "").match(pattern);
+    const match =
+        String(xml || "").match(pattern);
 
     return match
-        ? decodeProfileXmlEntity(match[1]).trim()
+        ? decodeProfileXmlEntity(
+            match[1]
+        ).trim()
         : "";
 }
 
@@ -2680,11 +2684,12 @@ function extractDeviceFromProfileBody(body, contentType = "") {
             return null;
         }
 
-        const encodings = ["utf8", "latin1"];
+        const candidates = [
+            buffer.toString("utf8"),
+            buffer.toString("latin1")
+        ];
 
-        for (const encoding of encodings) {
-            const raw = buffer.toString(encoding);
-
+        for (const raw of candidates) {
             let start = raw.indexOf("<?xml");
 
             if (start < 0) {
@@ -2719,43 +2724,21 @@ function extractDeviceFromProfileBody(body, contentType = "") {
 
         return {
             UDID:
-                extractProfileString(
-                    xml,
-                    "UDID"
-                ),
+                extractProfileString(xml, "UDID"),
             PRODUCT:
-                extractProfileString(
-                    xml,
-                    "PRODUCT"
-                ),
+                extractProfileString(xml, "PRODUCT"),
             VERSION:
-                extractProfileString(
-                    xml,
-                    "VERSION"
-                ),
+                extractProfileString(xml, "VERSION"),
             SERIAL:
-                extractProfileString(
-                    xml,
-                    "SERIAL"
-                ),
+                extractProfileString(xml, "SERIAL"),
             IMEI:
-                extractProfileString(
-                    xml,
-                    "IMEI"
-                ),
+                extractProfileString(xml, "IMEI"),
             ICCID:
-                extractProfileString(
-                    xml,
-                    "ICCID"
-                )
+                extractProfileString(xml, "ICCID")
         };
     }
 
-    /*
-     * Primeiro tenta plist em claro. Isso mantém
-     * compatibilidade caso algum iOS/proxy entregue
-     * o XML sem envelope PKCS#7.
-     */
+    // 1) Caso venha plist em claro.
     const directXml =
         findPlistInBuffer(body);
 
@@ -2764,26 +2747,95 @@ function extractDeviceFromProfileBody(body, contentType = "") {
     }
 
     const normalizedType =
-        String(contentType || "")
-            .toLowerCase();
+        String(contentType || "").toLowerCase();
 
-    if (
-        !normalizedType.includes(
+    const isPkcs7 =
+        normalizedType.includes(
             "application/pkcs7-signature"
-        ) &&
-        !normalizedType.includes(
+        ) ||
+        normalizedType.includes(
             "application/pkcs7-mime"
-        )
-    ) {
+        );
+
+    if (!isPkcs7) {
         return null;
     }
 
+    /*
+     * 2) Caminho principal: usa o OpenSSL do servidor para
+     * desempacotar CMS/PKCS#7 SignedData e devolver o plist.
+     *
+     * O iPhone envia o retorno do Profile Service como DER
+     * application/pkcs7-signature.
+     */
     try {
-        /*
-         * O retorno do Profile Service chega como CMS/PKCS#7.
-         * Parseamos o DER e percorremos os OCTET STRINGs
-         * internos até localizar o plist encapsulado.
-         */
+        const decoded =
+            execFileSync(
+                "openssl",
+                [
+                    "cms",
+                    "-verify",
+                    "-inform",
+                    "DER",
+                    "-noverify",
+                    "-binary"
+                ],
+                {
+                    input: body,
+                    encoding: null,
+                    stdio: [
+                        "pipe",
+                        "pipe",
+                        "pipe"
+                    ],
+                    maxBuffer:
+                        2 * 1024 * 1024
+                }
+            );
+
+        const xml =
+            findPlistInBuffer(decoded);
+
+        if (xml) {
+            console.log(
+                "PKCS#7 decodificado com OpenSSL:",
+                {
+                    decodedBytes:
+                        decoded.length
+                }
+            );
+
+            return deviceFromXml(xml);
+        }
+
+        console.error(
+            "OpenSSL decodificou o CMS, mas o plist não apareceu.",
+            {
+                decodedBytes:
+                    decoded?.length || 0
+            }
+        );
+    } catch (error) {
+        console.error(
+            "OpenSSL CMS não conseguiu extrair o conteúdo:",
+            error?.stderr
+                ? Buffer
+                    .from(error.stderr)
+                    .toString("utf8")
+                    .trim()
+                : error?.message ||
+                  String(error)
+        );
+    }
+
+    /*
+     * 3) Fallback node-forge.
+     *
+     * Além de olhar cada OCTET STRING isoladamente,
+     * concatena todos os valores binários porque alguns
+     * SignedData dividem o plist em vários blocos ASN.1.
+     */
+    try {
         const der =
             forge.util.createBuffer(
                 body.toString("binary"),
@@ -2796,20 +2848,17 @@ function extractDeviceFromProfileBody(body, contentType = "") {
                 false
             );
 
+        const chunks = [];
         let xml = null;
 
         function walk(node) {
-            if (xml || !node) {
+            if (!node) {
                 return;
             }
 
             if (Array.isArray(node.value)) {
                 for (const child of node.value) {
                     walk(child);
-
-                    if (xml) {
-                        return;
-                    }
                 }
 
                 return;
@@ -2825,24 +2874,66 @@ function extractDeviceFromProfileBody(body, contentType = "") {
                         "binary"
                     );
 
-                const found =
-                    findPlistInBuffer(
-                        candidate
-                    );
+                chunks.push(candidate);
 
-                if (found) {
-                    xml = found;
+                if (!xml) {
+                    xml =
+                        findPlistInBuffer(
+                            candidate
+                        );
                 }
             }
         }
 
         walk(root);
 
-        /*
-         * Fallback pelo objeto PKCS#7 do node-forge.
-         * Algumas mensagens SignedData expõem o conteúdo
-         * diretamente em message.content.
-         */
+        if (!xml && chunks.length) {
+            /*
+             * Testa concatenação total e também janelas de
+             * chunks consecutivos. Isso cobre eContent
+             * fragmentado em múltiplos OCTET STRING.
+             */
+            const combined =
+                Buffer.concat(chunks);
+
+            xml =
+                findPlistInBuffer(
+                    combined
+                );
+
+            if (!xml) {
+                for (
+                    let i = 0;
+                    i < chunks.length && !xml;
+                    i++
+                ) {
+                    const window = [];
+
+                    for (
+                        let j = i;
+                        j < chunks.length &&
+                        j < i + 12;
+                        j++
+                    ) {
+                        window.push(
+                            chunks[j]
+                        );
+
+                        xml =
+                            findPlistInBuffer(
+                                Buffer.concat(
+                                    window
+                                )
+                            );
+
+                        if (xml) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         if (!xml) {
             try {
                 const message =
@@ -2891,25 +2982,30 @@ function extractDeviceFromProfileBody(body, contentType = "") {
                 }
             } catch (pkcs7Error) {
                 console.error(
-                    "Fallback PKCS#7 não conseguiu ler SignedData:",
-                    pkcs7Error.message
+                    "Fallback PKCS#7 do node-forge falhou:",
+                    pkcs7Error?.message ||
+                    String(pkcs7Error)
                 );
             }
         }
 
         if (!xml) {
             console.error(
-                "PKCS#7 recebido, mas nenhum plist XML foi localizado."
+                "PKCS#7 recebido, mas nenhum plist XML foi localizado após OpenSSL e node-forge."
             );
 
             return null;
         }
 
+        console.log(
+            "PKCS#7 decodificado pelo fallback node-forge."
+        );
+
         return deviceFromXml(xml);
 
     } catch (error) {
         console.error(
-            "Falha decodificando PKCS#7:",
+            "Falha final decodificando PKCS#7:",
             error
         );
 
@@ -3008,6 +3104,20 @@ app.post(
                         "content-type"
                     ] || ""
                 );
+
+            if (device) {
+                console.log(
+                    "Plist UDID extraído:",
+                    {
+                        hasUDID:
+                            Boolean(device.UDID),
+                        product:
+                            device.PRODUCT || "",
+                        version:
+                            device.VERSION || ""
+                    }
+                );
+            }
 
             if (!device) {
                 console.error(
