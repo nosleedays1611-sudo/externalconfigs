@@ -764,6 +764,7 @@ select:focus{
 <div class="info"><span>Pausada em</span><span id="checkPaused">—</span></div>
 <div class="info"><span>Tempo restante</span><span id="checkRemaining">—</span></div>
 <div class="info"><span>Dispositivo</span><span id="checkDevice">Não vinculado</span></div>
+<div class="info"><span>UDID</span><span id="checkUdid">Não vinculado</span></div>
 <div class="info"><span>Vinculado em</span><span id="checkDeviceBoundAt">Nunca</span></div>
 
 <div class="copy-row">
@@ -1545,13 +1546,51 @@ async function checkKey() {
         document.getElementById("checkRemaining").textContent =
             formatRemaining(data.remaining_ms);
 
+        let fullKeyData = null;
+
+        try {
+            const {
+                response: listResponse,
+                data: listData
+            } = await request("/api/keys");
+
+            if (
+                listResponse.ok &&
+                listData.success &&
+                Array.isArray(listData.keys)
+            ) {
+                fullKeyData =
+                    listData.keys.find(
+                        item =>
+                            String(item.key || "") ===
+                            String(data.key || key)
+                    ) || null;
+            }
+        } catch (error) {
+            console.error(
+                "Não foi possível carregar o UDID da key:",
+                error
+            );
+        }
+
+        const deviceUdid =
+            fullKeyData?.device_udid ||
+            data.device_udid ||
+            "";
+
         document.getElementById("checkDevice").textContent =
-            data.device_bound
+            data.device_bound || Boolean(deviceUdid)
                 ? "Vinculado"
                 : "Não vinculado";
 
+        document.getElementById("checkUdid").textContent =
+            deviceUdid || "Não vinculado";
+
         document.getElementById("checkDeviceBoundAt").textContent =
-            formatDate(data.device_bound_at);
+            formatDate(
+                fullKeyData?.device_bound_at ||
+                data.device_bound_at
+            );
 
         document.getElementById("checkResult")
             .style.display = "block";
@@ -1845,8 +1884,11 @@ async function loadKeys() {
 
                                 <span>
                                     ${
-                                        key.device_bound
-                                            ? "UDID VINCULADO"
+                                        key.device_udid
+                                            ? "UDID " +
+                                              escapeHtml(
+                                                  key.device_udid
+                                              )
                                             : "SEM UDID"
                                     }
                                 </span>
