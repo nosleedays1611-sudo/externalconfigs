@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
 const path = require("path");
+const forge = require("node-forge");
 const db = require("./database");
 
 const app = express();
@@ -2665,7 +2666,7 @@ function extractProfileString(xml, key) {
         : "";
 }
 
-function extractDeviceFromProfileBody(body) {
+function extractDeviceFromProfileBody(body, contentType = "") {
     if (!Buffer.isBuffer(body)) {
         if (typeof body === "string") {
             body = Buffer.from(body, "binary");
@@ -2674,46 +2675,246 @@ function extractDeviceFromProfileBody(body) {
         }
     }
 
-    /*
-     * O iPhone pode enviar a resposta do Profile Service
-     * dentro de um envelope CMS/PKCS#7. O plist XML continua
-     * presente no payload, mas pode existir conteúdo binário
-     * antes/depois dele. Por isso não passamos o Buffer inteiro
-     * para um parser XML.
-     */
-    const raw = body.toString("latin1");
+    function findPlistInBuffer(buffer) {
+        if (!Buffer.isBuffer(buffer) || !buffer.length) {
+            return null;
+        }
 
-    let start = raw.indexOf("<?xml");
+        const encodings = ["utf8", "latin1"];
 
-    if (start < 0) {
-        start = raw.indexOf("<plist");
-    }
+        for (const encoding of encodings) {
+            const raw = buffer.toString(encoding);
 
-    const closeTag = "</plist>";
-    const closeIndex = raw.indexOf(closeTag, start);
+            let start = raw.indexOf("<?xml");
 
-    if (start < 0 || closeIndex < 0) {
+            if (start < 0) {
+                start = raw.indexOf("<plist");
+            }
+
+            if (start < 0) {
+                continue;
+            }
+
+            const closeTag = "</plist>";
+            const closeIndex =
+                raw.indexOf(closeTag, start);
+
+            if (closeIndex < 0) {
+                continue;
+            }
+
+            return raw.slice(
+                start,
+                closeIndex + closeTag.length
+            );
+        }
+
         return null;
     }
 
-    const xml = raw.slice(
-        start,
-        closeIndex + closeTag.length
-    );
+    function deviceFromXml(xml) {
+        if (!xml) {
+            return null;
+        }
 
-    return {
-        UDID: extractProfileString(xml, "UDID"),
-        PRODUCT:
-            extractProfileString(xml, "PRODUCT"),
-        VERSION:
-            extractProfileString(xml, "VERSION"),
-        SERIAL:
-            extractProfileString(xml, "SERIAL"),
-        IMEI:
-            extractProfileString(xml, "IMEI"),
-        ICCID:
-            extractProfileString(xml, "ICCID")
-    };
+        return {
+            UDID:
+                extractProfileString(
+                    xml,
+                    "UDID"
+                ),
+            PRODUCT:
+                extractProfileString(
+                    xml,
+                    "PRODUCT"
+                ),
+            VERSION:
+                extractProfileString(
+                    xml,
+                    "VERSION"
+                ),
+            SERIAL:
+                extractProfileString(
+                    xml,
+                    "SERIAL"
+                ),
+            IMEI:
+                extractProfileString(
+                    xml,
+                    "IMEI"
+                ),
+            ICCID:
+                extractProfileString(
+                    xml,
+                    "ICCID"
+                )
+        };
+    }
+
+    /*
+     * Primeiro tenta plist em claro. Isso mantém
+     * compatibilidade caso algum iOS/proxy entregue
+     * o XML sem envelope PKCS#7.
+     */
+    const directXml =
+        findPlistInBuffer(body);
+
+    if (directXml) {
+        return deviceFromXml(directXml);
+    }
+
+    const normalizedType =
+        String(contentType || "")
+            .toLowerCase();
+
+    if (
+        !normalizedType.includes(
+            "application/pkcs7-signature"
+        ) &&
+        !normalizedType.includes(
+            "application/pkcs7-mime"
+        )
+    ) {
+        return null;
+    }
+
+    try {
+        /*
+         * O retorno do Profile Service chega como CMS/PKCS#7.
+         * Parseamos o DER e percorremos os OCTET STRINGs
+         * internos até localizar o plist encapsulado.
+         */
+        const der =
+            forge.util.createBuffer(
+                body.toString("binary"),
+                "binary"
+            );
+
+        const root =
+            forge.asn1.fromDer(
+                der,
+                false
+            );
+
+        let xml = null;
+
+        function walk(node) {
+            if (xml || !node) {
+                return;
+            }
+
+            if (Array.isArray(node.value)) {
+                for (const child of node.value) {
+                    walk(child);
+
+                    if (xml) {
+                        return;
+                    }
+                }
+
+                return;
+            }
+
+            if (
+                typeof node.value ===
+                "string"
+            ) {
+                const candidate =
+                    Buffer.from(
+                        node.value,
+                        "binary"
+                    );
+
+                const found =
+                    findPlistInBuffer(
+                        candidate
+                    );
+
+                if (found) {
+                    xml = found;
+                }
+            }
+        }
+
+        walk(root);
+
+        /*
+         * Fallback pelo objeto PKCS#7 do node-forge.
+         * Algumas mensagens SignedData expõem o conteúdo
+         * diretamente em message.content.
+         */
+        if (!xml) {
+            try {
+                const message =
+                    forge.pkcs7
+                        .messageFromAsn1(root);
+
+                if (
+                    message &&
+                    message.content
+                ) {
+                    let bytes = null;
+
+                    if (
+                        typeof message.content
+                            .getBytes ===
+                        "function"
+                    ) {
+                        bytes =
+                            message.content
+                                .getBytes();
+                    } else if (
+                        typeof message.content
+                            .bytes ===
+                        "function"
+                    ) {
+                        bytes =
+                            message.content
+                                .bytes();
+                    } else if (
+                        typeof message.content ===
+                        "string"
+                    ) {
+                        bytes =
+                            message.content;
+                    }
+
+                    if (bytes !== null) {
+                        xml =
+                            findPlistInBuffer(
+                                Buffer.from(
+                                    bytes,
+                                    "binary"
+                                )
+                            );
+                    }
+                }
+            } catch (pkcs7Error) {
+                console.error(
+                    "Fallback PKCS#7 não conseguiu ler SignedData:",
+                    pkcs7Error.message
+                );
+            }
+        }
+
+        if (!xml) {
+            console.error(
+                "PKCS#7 recebido, mas nenhum plist XML foi localizado."
+            );
+
+            return null;
+        }
+
+        return deviceFromXml(xml);
+
+    } catch (error) {
+        console.error(
+            "Falha decodificando PKCS#7:",
+            error
+        );
+
+        return null;
+    }
 }
 
 /*
@@ -2801,7 +3002,12 @@ app.post(
             );
 
             const device =
-                extractDeviceFromProfileBody(body);
+                extractDeviceFromProfileBody(
+                    body,
+                    req.headers[
+                        "content-type"
+                    ] || ""
+                );
 
             if (!device) {
                 console.error(
