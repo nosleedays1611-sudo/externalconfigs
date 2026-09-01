@@ -2582,15 +2582,33 @@ function getUDIDFetcherClass() {
         UDIDFetcherClassPromise =
             import("udid-fetcher")
                 .then(module => {
-                    const exported =
-                        module.default ||
-                        module.UDIDFetcher ||
-                        module;
+                    const candidates = [
+                        module?.default?.default,
+                        module?.default?.UDIDFetcher,
+                        module?.default,
+                        module?.UDIDFetcher,
+                        module
+                    ];
 
-                    if (
-                        typeof exported !==
-                        "function"
-                    ) {
+                    const exported =
+                        candidates.find(
+                            candidate =>
+                                typeof candidate ===
+                                "function"
+                        );
+
+                    if (!exported) {
+                        console.error(
+                            "Exports disponíveis em udid-fetcher:",
+                            Object.keys(module || {}),
+                            module?.default &&
+                            typeof module.default === "object"
+                                ? Object.keys(
+                                      module.default
+                                  )
+                                : null
+                        );
+
                         throw new Error(
                             "Export de udid-fetcher inválido"
                         );
