@@ -726,16 +726,58 @@ function accountPublic(user) {
 ========================================================= */
 
 function ensureMasterOwner() {
-    let owner = db.getUserByUsername(MASTER_OWNER);
-
-    if (owner) {
-        refreshAccountStatus(owner);
-        return;
-    }
-
     const password = String(
         process.env.NEXTAWAY_PASSWORD || ""
     );
+
+    let owner =
+        db.getUserByUsername(
+            MASTER_OWNER
+        );
+
+    if (owner) {
+        refreshAccountStatus(owner);
+
+        /*
+         * MantÃ©m a senha do master owner sincronizada
+         * com NEXTAWAY_PASSWORD em todo startup/deploy.
+         * Assim o painel nÃ£o fica preso a um hash antigo
+         * caso o banco seja recriado/restaurado.
+         */
+        if (password.length >= 8) {
+            const { salt, hash } =
+                hashPassword(password);
+
+            db.prepare(`
+                UPDATE users
+                SET
+                    password_hash = ?,
+                    password_salt = ?,
+                    role = 'owner',
+                    enabled = 1,
+                    account_status = 'active',
+                    account_plan = 'lifetime',
+                    duration_days = NULL,
+                    expires_at = NULL,
+                    key_limit = NULL
+                WHERE id = ?
+            `).run(
+                hash,
+                salt,
+                owner.id
+            );
+
+            console.log(
+                'Senha do master owner "nextaway" sincronizada com NEXTAWAY_PASSWORD.'
+            );
+        } else {
+            console.warn(
+                "ATENÃÃO: NEXTAWAY_PASSWORD precisa ter pelo menos 8 caracteres."
+            );
+        }
+
+        return;
+    }
 
     if (password.length < 8) {
         console.warn(
@@ -744,7 +786,8 @@ function ensureMasterOwner() {
         return;
     }
 
-    const { salt, hash } = hashPassword(password);
+    const { salt, hash } =
+        hashPassword(password);
 
     db.prepare(`
         INSERT INTO users (
@@ -782,9 +825,10 @@ function ensureMasterOwner() {
         nowISO()
     );
 
-    console.log('Conta master owner "nextaway" criada.');
+    console.log(
+        'Conta master owner "nextaway" criada.'
+    );
 }
-
 ensureMasterOwner();
 
 /* =========================================================
