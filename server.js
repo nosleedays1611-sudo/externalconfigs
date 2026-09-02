@@ -306,7 +306,7 @@ function activateKeyAfterDeviceEnrollment(keyData, udid) {
     const fresh = getKey(keyData.key);
 
     if (!fresh) {
-        throw new Error("Key não encontrada");
+        throw new Error("Key nÃ£o encontrada");
     }
 
     const status = checkKeyExpiration(fresh);
@@ -375,7 +375,7 @@ function activateKeyAfterDeviceEnrollment(keyData, udid) {
             days <= 0
         ) {
             throw new Error(
-                "Plano da key inválido"
+                "Plano da key invÃ¡lido"
             );
         }
 
@@ -457,6 +457,61 @@ function getBearerToken(req) {
         : null;
 }
 
+function hasValidPanelSession(req) {
+    try {
+        const token = getBearerToken(req);
+
+        if (!token) {
+            return false;
+        }
+
+        const session = db.prepare(`
+            SELECT
+                sessions.expires_at AS session_expires_at,
+                users.enabled,
+                users.account_status
+            FROM sessions
+            JOIN users
+                ON users.id = sessions.user_id
+            WHERE sessions.token_hash = ?
+        `).get(hashToken(token));
+
+        if (!session) {
+            return false;
+        }
+
+        if (
+            new Date(
+                session.session_expires_at
+            ).getTime() <= Date.now()
+        ) {
+            return false;
+        }
+
+        if (!session.enabled) {
+            return false;
+        }
+
+        if (
+            String(
+                session.account_status || ""
+            ).toLowerCase() === "expired"
+        ) {
+            return false;
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error(
+            "Erro validando sessÃ£o opcional do painel:",
+            error
+        );
+
+        return false;
+    }
+}
+
 function logAction(userId, action, targetType = null, targetId = null) {
     try {
         db.logAction(userId, action, targetType, targetId);
@@ -501,7 +556,7 @@ function parseAccountPlan(body) {
             days <= 0 ||
             days > 36500
         ) {
-            throw new Error("Duração personalizada inválida");
+            throw new Error("DuraÃ§Ã£o personalizada invÃ¡lida");
         }
 
         return {
@@ -510,7 +565,7 @@ function parseAccountPlan(body) {
         };
     }
 
-    throw new Error("Plano da conta inválido");
+    throw new Error("Plano da conta invÃ¡lido");
 }
 
 function parseKeyLimit(value) {
@@ -530,7 +585,7 @@ function parseKeyLimit(value) {
         limit < 0 ||
         limit > 10000000
     ) {
-        throw new Error("Limite de keys inválido");
+        throw new Error("Limite de keys invÃ¡lido");
     }
 
     return limit;
@@ -684,7 +739,7 @@ function ensureMasterOwner() {
 
     if (password.length < 8) {
         console.warn(
-            "ATENÇÃO: defina NEXTAWAY_PASSWORD com pelo menos 8 caracteres."
+            "ATENÃÃO: defina NEXTAWAY_PASSWORD com pelo menos 8 caracteres."
         );
         return;
     }
@@ -743,7 +798,7 @@ function authRequired(req, res, next) {
         if (!token) {
             return res.status(401).json({
                 success: false,
-                message: "Não autenticado"
+                message: "NÃ£o autenticado"
             });
         }
 
@@ -761,7 +816,7 @@ function authRequired(req, res, next) {
         if (!session) {
             return res.status(401).json({
                 success: false,
-                message: "Sessão inválida"
+                message: "SessÃ£o invÃ¡lida"
             });
         }
 
@@ -775,7 +830,7 @@ function authRequired(req, res, next) {
 
             return res.status(401).json({
                 success: false,
-                message: "Sessão expirada"
+                message: "SessÃ£o expirada"
             });
         }
 
@@ -837,7 +892,7 @@ app.post("/api/auth/login", (req, res) => {
         if (!username || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Usuário e senha são obrigatórios"
+                message: "UsuÃ¡rio e senha sÃ£o obrigatÃ³rios"
             });
         }
 
@@ -854,7 +909,7 @@ app.post("/api/auth/login", (req, res) => {
         ) {
             return res.status(401).json({
                 success: false,
-                message: "Usuário ou senha inválidos"
+                message: "UsuÃ¡rio ou senha invÃ¡lidos"
             });
         }
 
@@ -958,11 +1013,11 @@ app.get(
             });
 
         } catch (error) {
-            console.error("Erro ao listar usuários:", error);
+            console.error("Erro ao listar usuÃ¡rios:", error);
 
             res.status(500).json({
                 success: false,
-                message: "Erro interno ao listar usuários"
+                message: "Erro interno ao listar usuÃ¡rios"
             });
         }
     }
@@ -992,7 +1047,7 @@ app.post(
             if (!/^[a-z0-9_.-]{3,32}$/.test(username)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Nome de usuário inválido"
+                    message: "Nome de usuÃ¡rio invÃ¡lido"
                 });
             }
 
@@ -1006,21 +1061,21 @@ app.post(
             if (!["owner", "user"].includes(role)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Cargo inválido. Use owner ou user."
+                    message: "Cargo invÃ¡lido. Use owner ou user."
                 });
             }
 
             if (username === MASTER_OWNER) {
                 return res.status(400).json({
                     success: false,
-                    message: "Nome de usuário reservado"
+                    message: "Nome de usuÃ¡rio reservado"
                 });
             }
 
             if (db.getUserByUsername(username)) {
                 return res.status(409).json({
                     success: false,
-                    message: "Usuário já existe"
+                    message: "UsuÃ¡rio jÃ¡ existe"
                 });
             }
 
@@ -1096,11 +1151,11 @@ app.post(
             });
 
         } catch (error) {
-            console.error("Erro ao criar usuário:", error);
+            console.error("Erro ao criar usuÃ¡rio:", error);
 
             res.status(500).json({
                 success: false,
-                message: "Erro interno ao criar usuário"
+                message: "Erro interno ao criar usuÃ¡rio"
             });
         }
     }
@@ -1121,7 +1176,7 @@ app.post(
             if (!Number.isInteger(id) || id <= 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "ID de usuário inválido"
+                    message: "ID de usuÃ¡rio invÃ¡lido"
                 });
             }
 
@@ -1130,7 +1185,7 @@ app.post(
             if (!target) {
                 return res.status(404).json({
                     success: false,
-                    message: "Usuário não encontrado"
+                    message: "UsuÃ¡rio nÃ£o encontrado"
                 });
             }
 
@@ -1140,7 +1195,7 @@ app.post(
             ) {
                 return res.status(400).json({
                     success: false,
-                    message: "A conta master owner não pode ser alterada"
+                    message: "A conta master owner nÃ£o pode ser alterada"
                 });
             }
 
@@ -1154,7 +1209,7 @@ app.post(
             if (!["owner", "user"].includes(role)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Cargo inválido"
+                    message: "Cargo invÃ¡lido"
                 });
             }
 
@@ -1247,11 +1302,11 @@ app.post(
             });
 
         } catch (error) {
-            console.error("Erro ao editar usuário:", error);
+            console.error("Erro ao editar usuÃ¡rio:", error);
 
             res.status(500).json({
                 success: false,
-                message: "Erro interno ao editar usuário"
+                message: "Erro interno ao editar usuÃ¡rio"
             });
         }
     }
@@ -1275,7 +1330,7 @@ app.post(
             if (!target) {
                 return res.status(404).json({
                     success: false,
-                    message: "Usuário não encontrado"
+                    message: "UsuÃ¡rio nÃ£o encontrado"
                 });
             }
 
@@ -1285,7 +1340,7 @@ app.post(
             ) {
                 return res.status(400).json({
                     success: false,
-                    message: "A conta master owner não pode ser desativada"
+                    message: "A conta master owner nÃ£o pode ser desativada"
                 });
             }
 
@@ -1317,11 +1372,11 @@ app.post(
             });
 
         } catch (error) {
-            console.error("Erro ao alterar usuário:", error);
+            console.error("Erro ao alterar usuÃ¡rio:", error);
 
             res.status(500).json({
                 success: false,
-                message: "Erro interno ao alterar usuário"
+                message: "Erro interno ao alterar usuÃ¡rio"
             });
         }
     }
@@ -1344,7 +1399,7 @@ app.post(
             if (!Number.isInteger(id) || id <= 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "ID de usuário inválido"
+                    message: "ID de usuÃ¡rio invÃ¡lido"
                 });
             }
 
@@ -1360,7 +1415,7 @@ app.post(
             if (!target) {
                 return res.status(404).json({
                     success: false,
-                    message: "Usuário não encontrado"
+                    message: "UsuÃ¡rio nÃ£o encontrado"
                 });
             }
 
@@ -1419,7 +1474,7 @@ app.delete(
             if (!target) {
                 return res.status(404).json({
                     success: false,
-                    message: "Usuário não encontrado"
+                    message: "UsuÃ¡rio nÃ£o encontrado"
                 });
             }
 
@@ -1429,7 +1484,7 @@ app.delete(
             ) {
                 return res.status(400).json({
                     success: false,
-                    message: "A conta master owner não pode ser excluída"
+                    message: "A conta master owner nÃ£o pode ser excluÃ­da"
                 });
             }
 
@@ -1447,15 +1502,15 @@ app.delete(
 
             res.json({
                 success: true,
-                message: "Usuário excluído com sucesso"
+                message: "UsuÃ¡rio excluÃ­do com sucesso"
             });
 
         } catch (error) {
-            console.error("Erro ao excluir usuário:", error);
+            console.error("Erro ao excluir usuÃ¡rio:", error);
 
             res.status(500).json({
                 success: false,
-                message: "Erro interno ao excluir usuário"
+                message: "Erro interno ao excluir usuÃ¡rio"
             });
         }
     }
@@ -1522,14 +1577,14 @@ app.post(
                 ) {
                     return res.status(400).json({
                         success: false,
-                        message: "Quantidade de dias inválida"
+                        message: "Quantidade de dias invÃ¡lida"
                     });
                 }
 
             } else {
                 return res.status(400).json({
                     success: false,
-                    message: "Plano inválido"
+                    message: "Plano invÃ¡lido"
                 });
             }
 
@@ -1557,7 +1612,7 @@ app.post(
                     success: false,
                     code: "KEY_LIMIT_EXCEEDED",
                     message:
-                        "Essa geração ultrapassa o limite de keys da conta",
+                        "Essa geraÃ§Ã£o ultrapassa o limite de keys da conta",
                     key_limit: limit,
                     keys_generated: alreadyGenerated,
                     keys_remaining:
@@ -1695,7 +1750,7 @@ app.post(
 );
 
 /* =========================================================
-   KEY CHECK - PÚBLICO
+   KEY CHECK - PÃBLICO
 ========================================================= */
 
 app.post("/api/keys/check", (req, res) => {
@@ -1708,10 +1763,19 @@ app.post("/api/keys/check", (req, res) => {
                 req.body.device_token
             );
 
+        /*
+         * O painel web usa a mesma rota para consultar keys,
+         * mas estÃ¡ autenticado com Bearer token.
+         * Bloqueio DEVICE_MISMATCH Ã© exclusivo do cliente
+         * pÃºblico/ExternalAuth, nÃ£o do painel administrativo.
+         */
+        const panelAuthorized =
+            hasValidPanelSession(req);
+
         if (!key) {
             return res.status(400).json({
                 success: false,
-                message: "Key não informada"
+                message: "Key nÃ£o informada"
             });
         }
 
@@ -1721,7 +1785,7 @@ app.post("/api/keys/check", (req, res) => {
             return res.json({
                 success: true,
                 found: false,
-                message: "Key não encontrada"
+                message: "Key nÃ£o encontrada"
             });
         }
 
@@ -1729,6 +1793,7 @@ app.post("/api/keys/check", (req, res) => {
             checkKeyExpiration(keyData);
 
         if (
+            !panelAuthorized &&
             status === "active" &&
             keyData.device_udid &&
             keyData.device_token_hash &&
@@ -1742,7 +1807,7 @@ app.post("/api/keys/check", (req, res) => {
                 found: true,
                 code: "DEVICE_MISMATCH",
                 message:
-                    "Essa key já foi usada em outro dispositivo."
+                    "Essa key jÃ¡ foi usada em outro dispositivo."
             });
         }
 
@@ -1810,14 +1875,14 @@ app.post("/api/keys/device/bind", (req, res) => {
         if (!key || !udid) {
             return res.status(400).json({
                 success: false,
-                message: "Key e UDID são obrigatórios"
+                message: "Key e UDID sÃ£o obrigatÃ³rios"
             });
         }
 
         if (!validUDID(udid)) {
             return res.status(400).json({
                 success: false,
-                message: "UDID inválido"
+                message: "UDID invÃ¡lido"
             });
         }
 
@@ -1826,7 +1891,7 @@ app.post("/api/keys/device/bind", (req, res) => {
         if (!keyData) {
             return res.status(404).json({
                 success: false,
-                message: "Key não encontrada"
+                message: "Key nÃ£o encontrada"
             });
         }
 
@@ -1866,7 +1931,7 @@ app.post("/api/keys/device/bind", (req, res) => {
                 success: true,
                 already_bound: true,
                 device_match: true,
-                message: "Dispositivo já vinculado"
+                message: "Dispositivo jÃ¡ vinculado"
             });
         }
 
@@ -1941,7 +2006,7 @@ app.post("/api/keys/device/verify", (req, res) => {
         if (!key || !udid) {
             return res.status(400).json({
                 success: false,
-                message: "Key e UDID são obrigatórios"
+                message: "Key e UDID sÃ£o obrigatÃ³rios"
             });
         }
 
@@ -1950,7 +2015,7 @@ app.post("/api/keys/device/verify", (req, res) => {
         if (!keyData) {
             return res.status(404).json({
                 success: false,
-                message: "Key não encontrada"
+                message: "Key nÃ£o encontrada"
             });
         }
 
@@ -1959,7 +2024,7 @@ app.post("/api/keys/device/verify", (req, res) => {
                 success: false,
                 code: "DEVICE_NOT_BOUND",
                 message:
-                    "Key ainda não possui dispositivo vinculado"
+                    "Key ainda nÃ£o possui dispositivo vinculado"
             });
         }
 
@@ -2007,7 +2072,7 @@ app.post("/api/keys/activate", (req, res) => {
         if (!key) {
             return res.status(400).json({
                 success: false,
-                message: "Key não informada"
+                message: "Key nÃ£o informada"
             });
         }
 
@@ -2016,7 +2081,7 @@ app.post("/api/keys/activate", (req, res) => {
         if (!keyData) {
             return res.status(404).json({
                 success: false,
-                message: "Key não encontrada"
+                message: "Key nÃ£o encontrada"
             });
         }
 
@@ -2026,7 +2091,7 @@ app.post("/api/keys/activate", (req, res) => {
         if (status === "paused") {
             return res.status(400).json({
                 success: false,
-                message: "Key está pausada"
+                message: "Key estÃ¡ pausada"
             });
         }
 
@@ -2077,7 +2142,7 @@ app.post("/api/keys/activate", (req, res) => {
         if (status !== "unused") {
             return res.status(400).json({
                 success: false,
-                message: "Key não pode ser ativada"
+                message: "Key nÃ£o pode ser ativada"
             });
         }
 
@@ -2088,7 +2153,7 @@ app.post("/api/keys/activate", (req, res) => {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Plano da key não encontrado"
+                    "Plano da key nÃ£o encontrado"
             });
         }
 
@@ -2148,7 +2213,7 @@ app.post(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2210,7 +2275,7 @@ app.post(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2278,7 +2343,7 @@ app.post(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2308,7 +2373,7 @@ app.post(
 
                 return res.status(400).json({
                     success: false,
-                    message: "Key já está expirada"
+                    message: "Key jÃ¡ estÃ¡ expirada"
                 });
             }
 
@@ -2373,7 +2438,7 @@ app.post(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2385,7 +2450,7 @@ app.post(
                 return res.status(400).json({
                     success: false,
                     message:
-                        "Key não está pausada ou não possui tempo restante"
+                        "Key nÃ£o estÃ¡ pausada ou nÃ£o possui tempo restante"
                 });
             }
 
@@ -2454,7 +2519,7 @@ app.delete(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2546,7 +2611,7 @@ app.get(
 
 
 /* =========================================================
-   UDID S0N1C - INICIAR SESSÃO
+   UDID S0N1C - INICIAR SESSÃO
 ========================================================= */
 
 app.post(
@@ -2559,7 +2624,7 @@ app.post(
             if (!key) {
                 return res.status(400).json({
                     success: false,
-                    message: "Key não informada"
+                    message: "Key nÃ£o informada"
                 });
             }
 
@@ -2568,7 +2633,7 @@ app.post(
             if (!keyData) {
                 return res.status(404).json({
                     success: false,
-                    message: "Key não encontrada"
+                    message: "Key nÃ£o encontrada"
                 });
             }
 
@@ -2606,21 +2671,21 @@ app.post(
 
         } catch (error) {
             console.error(
-                "Erro criando sessão UDID:",
+                "Erro criando sessÃ£o UDID:",
                 error
             );
 
             return res.status(500).json({
                 success: false,
                 message:
-                    "Erro interno ao criar sessão UDID"
+                    "Erro interno ao criar sessÃ£o UDID"
             });
         }
     }
 );
 
 /* =========================================================
-   UDID S0N1C - STATUS DA SESSÃO
+   UDID S0N1C - STATUS DA SESSÃO
 ========================================================= */
 
 app.post(
@@ -2637,7 +2702,7 @@ app.post(
                 return res.status(400).json({
                     success: false,
                     message:
-                        "Key e token são obrigatórios"
+                        "Key e token sÃ£o obrigatÃ³rios"
                 });
             }
 
@@ -2651,7 +2716,7 @@ app.post(
                 return res.status(404).json({
                     success: false,
                     message:
-                        "Sessão UDID não encontrada"
+                        "SessÃ£o UDID nÃ£o encontrada"
                 });
             }
 
@@ -2660,7 +2725,7 @@ app.post(
                     success: false,
                     expired: true,
                     message:
-                        "Sessão UDID expirada"
+                        "SessÃ£o UDID expirada"
                 });
             }
 
@@ -2693,14 +2758,14 @@ app.post(
 
         } catch (error) {
             console.error(
-                "Erro consultando sessão UDID:",
+                "Erro consultando sessÃ£o UDID:",
                 error
             );
 
             return res.status(500).json({
                 success: false,
                 message:
-                    "Erro interno ao consultar sessão UDID"
+                    "Erro interno ao consultar sessÃ£o UDID"
             });
         }
     }
@@ -2735,7 +2800,7 @@ function getUDIDFetcherClass() {
 
                     if (!exported) {
                         console.error(
-                            "Exports disponíveis em udid-fetcher:",
+                            "Exports disponÃ­veis em udid-fetcher:",
                             Object.keys(module || {}),
                             module?.default &&
                             typeof module.default === "object"
@@ -2746,7 +2811,7 @@ function getUDIDFetcherClass() {
                         );
 
                         throw new Error(
-                            "Export de udid-fetcher inválido"
+                            "Export de udid-fetcher invÃ¡lido"
                         );
                     }
 
@@ -2943,7 +3008,7 @@ function extractDeviceFromProfileBody(body, contentType = "") {
         }
 
         console.error(
-            "OpenSSL decodificou o CMS, mas o plist não apareceu.",
+            "OpenSSL decodificou o CMS, mas o plist nÃ£o apareceu.",
             {
                 decodedBytes:
                     decoded?.length || 0
@@ -2951,7 +3016,7 @@ function extractDeviceFromProfileBody(body, contentType = "") {
         );
     } catch (error) {
         console.error(
-            "OpenSSL CMS não conseguiu extrair o conteúdo:",
+            "OpenSSL CMS nÃ£o conseguiu extrair o conteÃºdo:",
             error?.stderr
                 ? Buffer
                     .from(error.stderr)
@@ -2965,9 +3030,9 @@ function extractDeviceFromProfileBody(body, contentType = "") {
     /*
      * 3) Fallback node-forge.
      *
-     * Além de olhar cada OCTET STRING isoladamente,
-     * concatena todos os valores binários porque alguns
-     * SignedData dividem o plist em vários blocos ASN.1.
+     * AlÃ©m de olhar cada OCTET STRING isoladamente,
+     * concatena todos os valores binÃ¡rios porque alguns
+     * SignedData dividem o plist em vÃ¡rios blocos ASN.1.
      */
     try {
         const der =
@@ -3023,9 +3088,9 @@ function extractDeviceFromProfileBody(body, contentType = "") {
 
         if (!xml && chunks.length) {
             /*
-             * Testa concatenação total e também janelas de
+             * Testa concatenaÃ§Ã£o total e tambÃ©m janelas de
              * chunks consecutivos. Isso cobre eContent
-             * fragmentado em múltiplos OCTET STRING.
+             * fragmentado em mÃºltiplos OCTET STRING.
              */
             const combined =
                 Buffer.concat(chunks);
@@ -3125,7 +3190,7 @@ function extractDeviceFromProfileBody(body, contentType = "") {
 
         if (!xml) {
             console.error(
-                "PKCS#7 recebido, mas nenhum plist XML foi localizado após OpenSSL e node-forge."
+                "PKCS#7 recebido, mas nenhum plist XML foi localizado apÃ³s OpenSSL e node-forge."
             );
 
             return null;
@@ -3151,8 +3216,8 @@ function extractDeviceFromProfileBody(body, contentType = "") {
  * Compatibilidade com iOS atual:
  * trata o POST /confirm antes do udid-fetcher antigo.
  *
- * O pacote antigo tenta analisar o corpo binário inteiro como XML,
- * o que causa o erro do xmldom. Aqui extraímos somente o plist XML
+ * O pacote antigo tenta analisar o corpo binÃ¡rio inteiro como XML,
+ * o que causa o erro do xmldom. Aqui extraÃ­mos somente o plist XML
  * contido na resposta do Profile Service.
  */
 app.post(
@@ -3176,7 +3241,7 @@ app.post(
                 return res
                     .status(400)
                     .type("text/plain")
-                    .send("Token de sessão inválido.");
+                    .send("Token de sessÃ£o invÃ¡lido.");
             }
 
             const enrollment =
@@ -3187,7 +3252,7 @@ app.post(
                     .status(404)
                     .type("text/plain")
                     .send(
-                        "Sessão UDID não encontrada."
+                        "SessÃ£o UDID nÃ£o encontrada."
                     );
             }
 
@@ -3198,7 +3263,7 @@ app.post(
                     .status(410)
                     .type("text/plain")
                     .send(
-                        "Sessão UDID expirada. Volte ao app e tente novamente."
+                        "SessÃ£o UDID expirada. Volte ao app e tente novamente."
                     );
             }
 
@@ -3241,7 +3306,7 @@ app.post(
 
             if (device) {
                 console.log(
-                    "Plist UDID extraído:",
+                    "Plist UDID extraÃ­do:",
                     {
                         hasUDID:
                             Boolean(device.UDID),
@@ -3255,7 +3320,7 @@ app.post(
 
             if (!device) {
                 console.error(
-                    "Não foi possível localizar plist XML no retorno UDID.",
+                    "NÃ£o foi possÃ­vel localizar plist XML no retorno UDID.",
                     {
                         contentType:
                             req.headers[
@@ -3269,7 +3334,7 @@ app.post(
                     .status(400)
                     .type("text/plain")
                     .send(
-                        "Resposta do dispositivo não pôde ser processada."
+                        "Resposta do dispositivo nÃ£o pÃ´de ser processada."
                     );
             }
 
@@ -3291,7 +3356,7 @@ app.post(
                 !validUDID(udid)
             ) {
                 console.error(
-                    "Resposta UDID sem UDID válido:",
+                    "Resposta UDID sem UDID vÃ¡lido:",
                     {
                         product,
                         version: iosVersion,
@@ -3304,7 +3369,7 @@ app.post(
                     .status(400)
                     .type("text/plain")
                     .send(
-                        "Não foi possível obter um UDID válido."
+                        "NÃ£o foi possÃ­vel obter um UDID vÃ¡lido."
                     );
             }
 
@@ -3323,7 +3388,7 @@ app.post(
                     .status(410)
                     .type("text/plain")
                     .send(
-                        "Sessão UDID expirada."
+                        "SessÃ£o UDID expirada."
                     );
             }
 
@@ -3335,7 +3400,7 @@ app.post(
                     .status(404)
                     .type("text/plain")
                     .send(
-                        "Key da sessão não encontrada."
+                        "Key da sessÃ£o nÃ£o encontrada."
                     );
             }
 
@@ -3407,7 +3472,7 @@ app.post(
                     .status(403)
                     .type("text/plain")
                     .send(
-                        "Essa key já está vinculada a outro dispositivo."
+                        "Essa key jÃ¡ estÃ¡ vinculada a outro dispositivo."
                     );
             }
 
@@ -3415,7 +3480,7 @@ app.post(
                 .status(500)
                 .type("text/plain")
                 .send(
-                    "Não foi possível vincular o dispositivo."
+                    "NÃ£o foi possÃ­vel vincular o dispositivo."
                 );
         }
     }
@@ -3435,7 +3500,7 @@ app.use(
 
             if (!enrollment) {
                 return res.status(404).send(
-                    "Sessão UDID não encontrada."
+                    "SessÃ£o UDID nÃ£o encontrada."
                 );
             }
 
@@ -3443,7 +3508,7 @@ app.use(
                 deviceFetcherCache.delete(token);
 
                 return res.status(410).send(
-                    "Sessão UDID expirada. Volte ao app e tente novamente."
+                    "SessÃ£o UDID expirada. Volte ao app e tente novamente."
                 );
             }
 
@@ -3461,7 +3526,7 @@ app.use(
                 fetcher = new UDIDFetcher({
                     name: "EXTERNAL Device",
                     description:
-                        "Vincula este iPhone à sua licença.",
+                        "Vincula este iPhone Ã  sua licenÃ§a.",
                     identifier:
                         "app.external.device",
                     organization:
@@ -3488,7 +3553,7 @@ app.use(
                                 return callbackRes
                                     .status(400)
                                     .send(
-                                        "Token de sessão inválido."
+                                        "Token de sessÃ£o invÃ¡lido."
                                     );
                             }
 
@@ -3510,7 +3575,7 @@ app.use(
                                 return callbackRes
                                     .status(410)
                                     .send(
-                                        "Sessão UDID expirada."
+                                        "SessÃ£o UDID expirada."
                                     );
                             }
 
@@ -3564,14 +3629,14 @@ app.use(
                                 !validUDID(udid)
                             ) {
                                 console.error(
-                                    "Resposta UDID inválida:",
+                                    "Resposta UDID invÃ¡lida:",
                                     device
                                 );
 
                                 return callbackRes
                                     .status(400)
                                     .send(
-                                        "Não foi possível obter um UDID válido."
+                                        "NÃ£o foi possÃ­vel obter um UDID vÃ¡lido."
                                     );
                             }
 
@@ -3640,14 +3705,14 @@ app.use(
                                 return callbackRes
                                     .status(403)
                                     .send(
-                                        "Essa key já está vinculada a outro dispositivo."
+                                        "Essa key jÃ¡ estÃ¡ vinculada a outro dispositivo."
                                     );
                             }
 
                             return callbackRes
                                 .status(500)
                                 .send(
-                                    "Não foi possível vincular o dispositivo."
+                                    "NÃ£o foi possÃ­vel vincular o dispositivo."
                                 );
                         }
                     }
@@ -3682,7 +3747,7 @@ app.use(
 );
 
 /* =========================================================
-   UDID S0N1C - PÁGINA DE SUCESSO
+   UDID S0N1C - PÃGINA DE SUCESSO
 ========================================================= */
 
 app.get(
@@ -3721,8 +3786,8 @@ p{margin:0;color:rgba(255,255,255,.68);line-height:1.45}
 </head>
 <body>
 <div class="card">
-<h1>${completed ? "Dispositivo vinculado" : "Sessão inválida"}</h1>
-<p>${completed ? "Volte para o aplicativo para continuar." : "Volte para o aplicativo e gere uma nova sessão de UDID."}</p>
+<h1>${completed ? "Dispositivo vinculado" : "SessÃ£o invÃ¡lida"}</h1>
+<p>${completed ? "Volte para o aplicativo para continuar." : "Volte para o aplicativo e gere uma nova sessÃ£o de UDID."}</p>
 </div>
 </body>
 </html>`);
@@ -3779,7 +3844,7 @@ app.get(
 app.use((req, res) => {
     res.status(404).json({
         success: false,
-        message: "Rota não encontrada"
+        message: "Rota nÃ£o encontrada"
     });
 });
 
@@ -3799,11 +3864,11 @@ app.use((error, req, res, next) => {
 app.listen(PORT, HOST, () => {
     console.log("=================================");
     console.log(`Servidor: http://${HOST}:${PORT}`);
-    console.log(`API pública: ${PUBLIC_URL}`);
+    console.log(`API pÃºblica: ${PUBLIC_URL}`);
     console.log(`Painel: ${PUBLIC_URL}/`);
     console.log(`Health: ${PUBLIC_URL}/health`);
-    console.log("Prefixo padrão: EXTERNAL");
-    console.log(`Máximo por geração: ${MAX_KEYS_PER_REQUEST}`);
+    console.log("Prefixo padrÃ£o: EXTERNAL");
+    console.log(`MÃ¡ximo por geraÃ§Ã£o: ${MAX_KEYS_PER_REQUEST}`);
     console.log("Master owner: nextaway");
     console.log("=================================");
 });
