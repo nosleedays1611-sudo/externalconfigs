@@ -391,6 +391,66 @@ select:focus{
     flex-wrap:wrap;
 }
 
+
+
+/* ==================================================
+   BANCO DE KEYS - SELECAO EM LOTE
+================================================== */
+.keys-bank-toolbar{
+    position:relative;
+    z-index:1;
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:8px;
+    margin-top:10px;
+}
+
+.keys-bank-toolbar .btn{
+    margin-top:0;
+    font-size:10px;
+    padding:10px 9px;
+}
+
+.keys-bank-status{
+    position:relative;
+    z-index:1;
+    margin-top:10px;
+    color:#7f858d;
+    font-size:10px;
+    letter-spacing:.2px;
+}
+
+.keys-bank-item{
+    display:grid;
+    grid-template-columns:28px minmax(0,1fr);
+    gap:10px;
+    align-items:flex-start;
+}
+
+.key-select-wrap{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding-top:2px;
+}
+
+.key-select{
+    width:18px;
+    height:18px;
+    margin:0;
+    padding:0;
+    accent-color:#dfe2e7;
+    cursor:pointer;
+}
+
+.keys-bank-item.selected{
+    background:rgba(255,255,255,.025);
+}
+
+@media(max-width:650px){
+    .keys-bank-toolbar{grid-template-columns:1fr 1fr}
+}
+
 .owner-only{display:none}
 
 .user-top{
@@ -790,6 +850,20 @@ select:focus{
 <div class="panel-card">
 <div class="title">KEYS DO BANCO</div>
 <button type="button" class="btn" id="listButton">Atualizar Lista</button>
+
+<div class="keys-bank-toolbar">
+<button type="button" class="btn" id="selectAllKeysButton">Selecionar Todas</button>
+<button type="button" class="btn" id="clearKeySelectionButton">Limpar Seleção</button>
+<button type="button" class="btn" id="copySelectedKeysButton">Copiar Selecionadas</button>
+<button type="button" class="btn btn-danger" id="deleteSelectedKeysButton">Excluir Selecionadas</button>
+</div>
+
+<div class="keys-bank-toolbar" style="grid-template-columns:1fr 1fr">
+<button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
+<button type="button" class="btn btn-danger" id="deleteAllKeysButton">Excluir Todas</button>
+</div>
+
+<div class="keys-bank-status" id="keysSelectionStatus">0 selecionadas</div>
 <div id="keysList" style="margin-top:15px"></div>
 </div>
 
@@ -1805,6 +1879,129 @@ LISTAR KEYS
 ==================================================
 */
 
+let loadedBankKeys = [];
+const selectedBankKeys = new Set();
+
+function updateKeysSelectionStatus() {
+    const total = loadedBankKeys.length;
+    const selected = selectedBankKeys.size;
+    const status = document.getElementById("keysSelectionStatus");
+
+    if (status) {
+        status.textContent =
+            selected +
+            (selected === 1 ? " selecionada" : " selecionadas") +
+            " de " + total;
+    }
+
+    const hasKeys = total > 0;
+    const hasSelection = selected > 0;
+
+    const copyAll = document.getElementById("copyAllKeysButton");
+    const selectAll = document.getElementById("selectAllKeysButton");
+    const clearSelection = document.getElementById("clearKeySelectionButton");
+    const copySelected = document.getElementById("copySelectedKeysButton");
+    const deleteSelected = document.getElementById("deleteSelectedKeysButton");
+    const deleteAll = document.getElementById("deleteAllKeysButton");
+
+    if (copyAll) copyAll.disabled = !hasKeys;
+    if (selectAll) selectAll.disabled = !hasKeys;
+    if (clearSelection) clearSelection.disabled = !hasSelection;
+    if (copySelected) copySelected.disabled = !hasSelection;
+    if (deleteSelected) deleteSelected.disabled = !hasSelection;
+    if (deleteAll) deleteAll.disabled = !hasKeys;
+}
+
+function selectedKeysArray() {
+    return loadedBankKeys
+        .map(item => item.key)
+        .filter(key => selectedBankKeys.has(key));
+}
+
+async function copyKeysToClipboard(keys) {
+    if (!keys.length) {
+        return toast("Nenhuma key selecionada.");
+    }
+
+    const value = keys.join("\n");
+
+    try {
+        await navigator.clipboard.writeText(value);
+        toast(
+            keys.length === 1
+                ? "1 key copiada."
+                : keys.length + " keys copiadas."
+        );
+    } catch {
+        const area = document.createElement("textarea");
+        area.value = value;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+
+        try {
+            document.execCommand("copy");
+            toast(
+                keys.length === 1
+                    ? "1 key copiada."
+                    : keys.length + " keys copiadas."
+            );
+        } catch {
+            toast("N\u00e3o foi poss\u00edvel copiar automaticamente.");
+        } finally {
+            area.remove();
+        }
+    }
+}
+
+async function deleteBankKeys(keys) {
+    if (!keys.length) {
+        return toast("Nenhuma key selecionada.");
+    }
+
+    let deleted = 0;
+    let failed = 0;
+
+    for (const key of keys) {
+        try {
+            const {response, data} = await request(
+                "/api/keys/delete",
+                {
+                    method: "DELETE",
+                    body: JSON.stringify({key})
+                }
+            );
+
+            if (response.ok && data.success) {
+                deleted += 1;
+                selectedBankKeys.delete(key);
+            } else {
+                failed += 1;
+            }
+        } catch {
+            failed += 1;
+        }
+    }
+
+    if (deleted > 0) {
+        toast(
+            deleted +
+            (deleted === 1 ? " key exclu\u00edda." : " keys exclu\u00eddas.") +
+            (failed ? " " + failed + " falharam." : "")
+        );
+    } else {
+        toast("Nenhuma key foi exclu\u00edda.");
+    }
+
+    document.getElementById("checkResult").style.display = "none";
+    document.getElementById("checkInput").value = "";
+
+    await loadKeys();
+    await refreshMe();
+}
+
 async function loadKeys() {
     const container =
         document.getElementById("keysList");
@@ -1828,57 +2025,101 @@ async function loadKeys() {
             );
         }
 
-        if (
-            !data.keys ||
-            !data.keys.length
-        ) {
+        loadedBankKeys = Array.isArray(data.keys)
+            ? data.keys
+            : [];
+
+        const validKeys = new Set(
+            loadedBankKeys.map(item => item.key)
+        );
+
+        for (const key of Array.from(selectedBankKeys)) {
+            if (!validKeys.has(key)) {
+                selectedBankKeys.delete(key);
+            }
+        }
+
+        if (!loadedBankKeys.length) {
             container.innerHTML =
                 '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key cadastrada.</div>';
 
+            selectedBankKeys.clear();
+            updateKeysSelectionStatus();
             return;
         }
 
         container.innerHTML =
-            data.keys
+            loadedBankKeys
                 .map(
                     key => `
-                        <div class="list-item">
-                            <div class="list-key" data-key="${escapeHtml(key.key)}">
-                                ${escapeHtml(key.key)}
+                        <div class="list-item keys-bank-item ${selectedBankKeys.has(key.key) ? "selected" : ""}">
+                            <div class="key-select-wrap">
+                                <input
+                                    type="checkbox"
+                                    class="key-select"
+                                    data-key="${escapeHtml(key.key)}"
+                                    ${selectedBankKeys.has(key.key) ? "checked" : ""}
+                                    aria-label="Selecionar key ${escapeHtml(key.key)}"
+                                >
                             </div>
 
-                            <div class="list-meta">
-                                <span>${escapeHtml(statusText(key.status))}</span>
+                            <div>
+                                <div class="list-key" data-key="${escapeHtml(key.key)}">
+                                    ${escapeHtml(key.key)}
+                                </div>
 
-                                <span>
+                                <div class="list-meta">
+                                    <span>${escapeHtml(statusText(key.status))}</span>
+
+                                    <span>
+                                        ${
+                                            key.days
+                                                ? escapeHtml(
+                                                    key.days +
+                                                    (key.days === 1 ? " dia" : " dias")
+                                                )
+                                                : "\u2014"
+                                        }
+                                    </span>
+
+                                    <span>
+                                        ${
+                                            key.device_bound
+                                                ? "UDID VINCULADO"
+                                                : "SEM UDID"
+                                        }
+                                    </span>
+
                                     ${
-                                        key.days
-                                            ? escapeHtml(
-                                                key.days +
-                                                (key.days === 1 ? " dia" : " dias")
-                                            )
-                                            : "\u2014"
+                                        key.created_by_username
+                                            ? `<span>POR ${escapeHtml(key.created_by_username)}</span>`
+                                            : ""
                                     }
-                                </span>
-
-                                <span>
-                                    ${
-                                        key.device_bound
-                                            ? "UDID VINCULADO"
-                                            : "SEM UDID"
-                                    }
-                                </span>
-
-                                ${
-                                    key.created_by_username
-                                        ? `<span>POR ${escapeHtml(key.created_by_username)}</span>`
-                                        : ""
-                                }
+                                </div>
                             </div>
                         </div>
                     `
                 )
                 .join("");
+
+        container
+            .querySelectorAll(".key-select")
+            .forEach(element => {
+                element.addEventListener("change", () => {
+                    const key = element.dataset.key;
+                    const row = element.closest(".keys-bank-item");
+
+                    if (element.checked) {
+                        selectedBankKeys.add(key);
+                        row?.classList.add("selected");
+                    } else {
+                        selectedBankKeys.delete(key);
+                        row?.classList.remove("selected");
+                    }
+
+                    updateKeysSelectionStatus();
+                });
+            });
 
         container
             .querySelectorAll(".list-key")
@@ -1902,7 +2143,13 @@ async function loadKeys() {
                 }
             );
 
+        updateKeysSelectionStatus();
+
     } catch (error) {
+        loadedBankKeys = [];
+        selectedBankKeys.clear();
+        updateKeysSelectionStatus();
+
         container.innerHTML =
             '<div style="color:var(--red);font-size:12px;text-align:center;padding:10px">' +
             escapeHtml(
@@ -1918,6 +2165,120 @@ document
     .addEventListener(
         "click",
         loadKeys
+    );
+
+document
+    .getElementById("selectAllKeysButton")
+    .addEventListener(
+        "click",
+        () => {
+            loadedBankKeys.forEach(item => {
+                selectedBankKeys.add(item.key);
+            });
+
+            document
+                .querySelectorAll("#keysList .key-select")
+                .forEach(element => {
+                    element.checked = true;
+                    element.closest(".keys-bank-item")?.classList.add("selected");
+                });
+
+            updateKeysSelectionStatus();
+            toast("Todas as keys foram selecionadas.");
+        }
+    );
+
+document
+    .getElementById("clearKeySelectionButton")
+    .addEventListener(
+        "click",
+        () => {
+            selectedBankKeys.clear();
+
+            document
+                .querySelectorAll("#keysList .key-select")
+                .forEach(element => {
+                    element.checked = false;
+                    element.closest(".keys-bank-item")?.classList.remove("selected");
+                });
+
+            updateKeysSelectionStatus();
+            toast("Sele\u00e7\u00e3o limpa.");
+        }
+    );
+
+document
+    .getElementById("copySelectedKeysButton")
+    .addEventListener(
+        "click",
+        () => copyKeysToClipboard(selectedKeysArray())
+    );
+
+document
+    .getElementById("copyAllKeysButton")
+    .addEventListener(
+        "click",
+        () => copyKeysToClipboard(
+            loadedBankKeys.map(item => item.key)
+        )
+    );
+
+document
+    .getElementById("deleteSelectedKeysButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const keys = selectedKeysArray();
+
+            if (!keys.length) {
+                return toast("Selecione pelo menos uma key.");
+            }
+
+            if (
+                !confirm(
+                    "Excluir permanentemente " +
+                    keys.length +
+                    (keys.length === 1 ? " key selecionada?" : " keys selecionadas?")
+                )
+            ) {
+                return;
+            }
+
+            await deleteBankKeys(keys);
+        }
+    );
+
+document
+    .getElementById("deleteAllKeysButton")
+    .addEventListener(
+        "click",
+        async () => {
+            const keys = loadedBankKeys.map(item => item.key);
+
+            if (!keys.length) {
+                return toast("N\u00e3o existem keys para excluir.");
+            }
+
+            if (
+                !confirm(
+                    "ATEN\u00c7\u00c3O: excluir TODAS as " +
+                    keys.length +
+                    " keys do banco permanentemente?"
+                )
+            ) {
+                return;
+            }
+
+            const secondConfirm = prompt(
+                'Digite EXCLUIR para confirmar a exclus\u00e3o de todas as keys.'
+            );
+
+            if (String(secondConfirm || "").trim().toUpperCase() !== "EXCLUIR") {
+                return toast("Exclus\u00e3o cancelada.");
+            }
+
+            await deleteBankKeys(keys);
+        }
     );
 
 /*
