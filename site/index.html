@@ -372,83 +372,204 @@ select:focus{
 .user-row:last-child{border-bottom:0}
 
 .list-key{
+    display:inline-block;
     font-family:"SFMono-Regular",Consolas,monospace;
-    color:var(--green);
+    color:#ffffff;
     font-size:12px;
+    font-weight:750;
+    letter-spacing:.35px;
     word-break:break-all;
     cursor:pointer;
+    text-shadow:
+        0 0 5px rgba(255,255,255,.72),
+        0 0 13px rgba(180,220,255,.38),
+        0 0 24px rgba(130,190,255,.20);
+    transition:.18s ease;
 }
 
-.list-key:hover{text-decoration:underline}
+.list-key:hover{
+    color:#fff;
+    text-shadow:
+        0 0 7px rgba(255,255,255,.95),
+        0 0 18px rgba(180,220,255,.56),
+        0 0 34px rgba(130,190,255,.30);
+    transform:translateY(-1px);
+}
 
 .list-meta{
     display:flex;
-    justify-content:space-between;
-    gap:10px;
-    margin-top:7px;
-    color:#747a82;
-    font-size:10px;
+    justify-content:flex-start;
+    gap:7px;
+    margin-top:9px;
+    color:#828892;
+    font-size:9px;
     flex-wrap:wrap;
 }
 
-
+.list-meta span{
+    padding:5px 8px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.065);
+    background:rgba(255,255,255,.022);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
 
 /* ==================================================
-   BANCO DE KEYS - SELECAO EM LOTE
+   BANCO DE KEYS - LIQUID GLASS / SELECAO EM LOTE
 ================================================== */
-.keys-bank-toolbar{
+.keys-bank-controls{
     position:relative;
     z-index:1;
+    margin-top:12px;
+    padding:12px;
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.075);
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.015)),
+        rgba(255,255,255,.012);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.055);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+}
+
+.keys-bank-toolbar{
     display:grid;
-    grid-template-columns:repeat(4,1fr);
+    grid-template-columns:repeat(3,1fr);
     gap:8px;
-    margin-top:10px;
+}
+
+.keys-bank-toolbar.secondary{
+    grid-template-columns:1fr 1fr;
+    margin-top:8px;
 }
 
 .keys-bank-toolbar .btn{
     margin-top:0;
-    font-size:10px;
-    padding:10px 9px;
+    min-height:38px;
+    font-size:9px;
+    padding:9px 8px;
+    border-radius:12px;
 }
 
 .keys-bank-status{
-    position:relative;
-    z-index:1;
-    margin-top:10px;
-    color:#7f858d;
-    font-size:10px;
-    letter-spacing:.2px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:30px;
+    margin-top:9px;
+    color:#969ca5;
+    font-size:9px;
+    letter-spacing:.55px;
+    text-transform:uppercase;
+}
+
+#keysList{
+    display:grid;
+    gap:8px;
 }
 
 .keys-bank-item{
     display:grid;
-    grid-template-columns:28px minmax(0,1fr);
-    gap:10px;
-    align-items:flex-start;
+    grid-template-columns:34px minmax(0,1fr);
+    gap:11px;
+    align-items:center;
+    padding:13px 14px !important;
+    border:1px solid rgba(255,255,255,.065) !important;
+    border-radius:16px;
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.012)),
+        rgba(5,6,8,.24);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.045),
+        0 10px 25px rgba(0,0,0,.10);
+    transition:.18s ease;
+}
+
+.keys-bank-item:hover{
+    border-color:rgba(255,255,255,.12) !important;
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.018)),
+        rgba(8,10,13,.30);
+    transform:translateY(-1px);
 }
 
 .key-select-wrap{
     display:flex;
     align-items:center;
     justify-content:center;
-    padding-top:2px;
 }
 
 .key-select{
-    width:18px;
-    height:18px;
+    appearance:none;
+    -webkit-appearance:none;
+    position:relative;
+    width:21px;
+    height:21px;
+    min-width:21px;
     margin:0;
     padding:0;
-    accent-color:#dfe2e7;
     cursor:pointer;
+    border-radius:7px;
+    border:1px solid rgba(255,255,255,.18);
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.018)),
+        rgba(10,12,15,.60);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.08),
+        0 6px 14px rgba(0,0,0,.22);
+    transition:.17s ease;
+}
+
+.key-select:hover{
+    border-color:rgba(255,255,255,.32);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.12),
+        0 0 0 3px rgba(255,255,255,.025),
+        0 6px 16px rgba(0,0,0,.25);
+}
+
+.key-select:checked{
+    border-color:rgba(210,235,255,.62);
+    background:
+        linear-gradient(145deg,rgba(255,255,255,.88),rgba(205,225,245,.68));
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.95),
+        0 0 10px rgba(190,225,255,.42),
+        0 0 24px rgba(150,205,255,.20);
+}
+
+.key-select:checked::after{
+    content:"";
+    position:absolute;
+    left:6px;
+    top:3px;
+    width:5px;
+    height:9px;
+    border:solid #12161b;
+    border-width:0 2px 2px 0;
+    transform:rotate(45deg);
 }
 
 .keys-bank-item.selected{
-    background:rgba(255,255,255,.025);
+    border-color:rgba(195,225,255,.20) !important;
+    background:
+        linear-gradient(145deg,rgba(205,230,255,.075),rgba(255,255,255,.018)),
+        rgba(8,10,14,.34);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.075),
+        0 0 22px rgba(150,205,255,.055),
+        0 12px 28px rgba(0,0,0,.13);
 }
 
 @media(max-width:650px){
     .keys-bank-toolbar{grid-template-columns:1fr 1fr}
+    .keys-bank-toolbar.secondary{grid-template-columns:1fr 1fr}
+    .keys-bank-item{grid-template-columns:32px minmax(0,1fr);padding:12px !important}
+}
+
+@media(max-width:420px){
+    .keys-bank-toolbar,
+    .keys-bank-toolbar.secondary{grid-template-columns:1fr}
 }
 
 .owner-only{display:none}
@@ -851,20 +972,24 @@ select:focus{
 <div class="title">KEYS DO BANCO</div>
 <button type="button" class="btn" id="listButton">Atualizar Lista</button>
 
+<div class="keys-bank-controls">
 <div class="keys-bank-toolbar">
 <button type="button" class="btn" id="selectAllKeysButton">Selecionar Todas</button>
-<button type="button" class="btn" id="clearKeySelectionButton">Limpar Seleção</button>
+<button type="button" class="btn" id="clearKeySelectionButton">Limpar Sele&#231;&#227;o</button>
 <button type="button" class="btn" id="copySelectedKeysButton">Copiar Selecionadas</button>
+</div>
+
+<div class="keys-bank-toolbar secondary">
+<button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
 <button type="button" class="btn btn-danger" id="deleteSelectedKeysButton">Excluir Selecionadas</button>
 </div>
 
-<div class="keys-bank-toolbar" style="grid-template-columns:1fr 1fr">
-<button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
-<button type="button" class="btn btn-danger" id="deleteAllKeysButton">Excluir Todas</button>
+<div class="keys-bank-status" id="keysSelectionStatus">0 selecionadas</div>
 </div>
 
-<div class="keys-bank-status" id="keysSelectionStatus">0 selecionadas</div>
-<div id="keysList" style="margin-top:15px"></div>
+<div id="keysList" style="margin-top:12px"></div>
+
+<button type="button" class="btn btn-danger" id="deleteAllKeysButton" style="margin-top:12px">Excluir Todas as Keys</button>
 </div>
 
 </div>
