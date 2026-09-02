@@ -1753,6 +1753,89 @@ app.post(
    KEY CHECK - PÃBLICO
 ========================================================= */
 
+
+/* =========================================================
+   CHECK KEY - PAINEL ADMIN
+   PRIVADO - NÃO APLICA DEVICE_MISMATCH
+========================================================= */
+
+app.post(
+    "/api/admin/keys/check",
+    authRequired,
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            if (!key) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key nÃ£o informada"
+                });
+            }
+
+            const keyData = getKey(key);
+
+            if (!keyData) {
+                return res.json({
+                    success: true,
+                    found: false,
+                    message: "Key nÃ£o encontrada"
+                });
+            }
+
+            const status =
+                checkKeyExpiration(keyData);
+
+            return res.json({
+                success: true,
+                found: true,
+
+                key: keyData.key,
+                prefix: keyData.prefix,
+                status,
+                days:
+                    getDaysFromKey(keyData),
+
+                created_at:
+                    keyData.created_at,
+                activated_at:
+                    keyData.activated_at,
+                expires_at:
+                    keyData.expires_at,
+                paused_at:
+                    keyData.paused_at,
+                remaining_ms:
+                    keyData.remaining_ms,
+
+                device_bound:
+                    Boolean(keyData.device_udid),
+                device_udid:
+                    keyData.device_udid || null,
+                device_bound_at:
+                    keyData.device_bound_at,
+
+                created_by_username:
+                    keyData.created_by_username ||
+                    keyData.created_by ||
+                    null
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro ao consultar key no painel:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Erro interno ao consultar key"
+            });
+        }
+    }
+);
+
 app.post("/api/keys/check", (req, res) => {
     try {
         const key =
@@ -1769,8 +1852,11 @@ app.post("/api/keys/check", (req, res) => {
          * Bloqueio DEVICE_MISMATCH Ã© exclusivo do cliente
          * pÃºblico/ExternalAuth, nÃ£o do painel administrativo.
          */
-        const panelAuthorized =
-            hasValidPanelSession(req);
+        const isExternalAuthRequest =
+            Object.prototype.hasOwnProperty.call(
+                req.body || {},
+                "device_token"
+            );
 
         if (!key) {
             return res.status(400).json({
@@ -1793,7 +1879,7 @@ app.post("/api/keys/check", (req, res) => {
             checkKeyExpiration(keyData);
 
         if (
-            !panelAuthorized &&
+            isExternalAuthRequest &&
             status === "active" &&
             keyData.device_udid &&
             keyData.device_token_hash &&
@@ -1807,7 +1893,7 @@ app.post("/api/keys/check", (req, res) => {
                 found: true,
                 code: "DEVICE_MISMATCH",
                 message:
-                    "Essa key jÃ¡ foi usada em outro dispositivo."
+                    "Essa key ja foi usada em outro dispositivo."
             });
         }
 
