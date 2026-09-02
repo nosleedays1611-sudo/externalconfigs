@@ -21,11 +21,22 @@ let backupTimer = null;
 let backupRunning = false;
 let backupQueued = false;
 let dirty = false;
+let restoreCheckCompleted = false;
+let lastRestoreResult = null;
 let lastBackupAt = null;
 let lastBackupError = null;
 
 function configured() {
     return Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO && GITHUB_BRANCH);
+}
+
+function assertConfigured() {
+    if (!configured()) {
+        throw new Error(
+            "Backup GitHub nao configurado. Defina GITHUB_BACKUP_TOKEN, " +
+            "GITHUB_BACKUP_OWNER, GITHUB_BACKUP_REPO e GITHUB_BACKUP_BRANCH."
+        );
+    }
 }
 
 function githubHeaders(extra = {}) {
@@ -61,6 +72,8 @@ async function githubJson(url, options = {}) {
 }
 
 async function getRemoteFile(remotePath = REMOTE_PATH) {
+    assertConfigured();
+
     const url = `${githubContentsUrl(remotePath)}?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
     const { response, data } = await githubJson(url);
 
@@ -74,6 +87,8 @@ async function getRemoteFile(remotePath = REMOTE_PATH) {
 }
 
 async function downloadBlob(sha) {
+    assertConfigured();
+
     const url = `${API_BASE}/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}/git/blobs/${encodeURIComponent(sha)}`;
     const { response, data } = await githubJson(url);
 
@@ -82,47 +97,70 @@ async function downloadBlob(sha) {
     }
 
     if (!data || data.encoding !== "base64" || !data.content) {
-        throw new Error("GitHub retornou blob inválido.");
+        throw new Error("GitHub retornou blob invalido.");
     }
 
     return Buffer.from(String(data.content).replace(/\n/g, ""), "base64");
 }
 
-async function restoreLatestIfNeeded() {
-    if (!configured()) {
-        console.warn("[BACKUP] Variáveis do GitHub não configuradas. Restauração automática desativada.");
-        return { restored: false, reason: "not_configured" };
-    }
+function isValidSQLiteBuffer(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 100) return false;
+    return buffer.subarray(0, 16).toString("binary") === "SQLite format 3\0";
+}
 
-    let localExists = false;
-    try {
-        const stat = fs.statSync(DB_PATH);
-        localExists = stat.isFile() && stat.size > 4096;
-    } catch {
-        localExists = false;
+function removeSQLiteSidecars() {
+    for (const suffix of ["-wal", "-shm"]) {
+        try { fs.rmSync(`${DB_PATH}${suffix}`, { force: true }); } catch {}
     }
+}
 
-    if (localExists) {
-        console.log("[BACKUP] database.db local encontrado; restauração remota não foi necessária.");
-        return { restored: false, reason: "local_exists" };
-    }
+async function restoreLatestOnStartup() {
+    assertConfigured();
 
     const remote = await getRemoteFile();
 
     if (!remote || !remote.sha) {
-        console.log("[BACKUP] Nenhum backups/latest.db encontrado no GitHub. O sistema iniciará com banco novo.");
-        return { restored: false, reason: "no_remote_backup" };
+        restoreCheckCompleted = true;
+        lastRestoreResult = { restored: false, reason: "no_remote_backup" };
+        console.log("[BACKUP] Nenhum backups/latest.db encontrado no GitHub. O sistema podera iniciar com banco local/novo.");
+        return lastRestoreResult;
     }
 
     const buffer = await downloadBlob(remote.sha);
-    if (!buffer || buffer.length < 100) throw new Error("Backup remoto está vazio ou inválido.");
+
+    if (!isValidSQLiteBuffer(buffer)) {
+        throw new Error("Backup remoto invalido: arquivo nao possui cabecalho SQLite valido.");
+    }
 
     const tmp = `${DB_PATH}.restore.tmp`;
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+
     fs.writeFileSync(tmp, buffer);
+
+    const tmpCheck = fs.readFileSync(tmp);
+    if (!isValidSQLiteBuffer(tmpCheck)) {
+        try { fs.rmSync(tmp, { force: true }); } catch {}
+        throw new Error("Falha ao validar o arquivo temporario de restauracao.");
+    }
+
+    removeSQLiteSidecars();
+    try { fs.rmSync(DB_PATH, { force: true }); } catch {}
     fs.renameSync(tmp, DB_PATH);
 
-    console.log(`[BACKUP] SQLite restaurado do GitHub (${buffer.length} bytes).`);
-    return { restored: true, bytes: buffer.length, sha: remote.sha };
+    restoreCheckCompleted = true;
+    lastRestoreResult = {
+        restored: true,
+        reason: "remote_restored",
+        bytes: buffer.length,
+        sha: remote.sha
+    };
+
+    console.log(`[BACKUP] SQLite restaurado do GitHub e aplicado localmente (${buffer.length} bytes).`);
+    return lastRestoreResult;
+}
+
+async function restoreLatestIfNeeded() {
+    return restoreLatestOnStartup();
 }
 
 function isMutatingSql(sql) {
@@ -136,7 +174,7 @@ function isMutatingSql(sql) {
 
 function scheduleBackup(reason = "database_change") {
     dirty = true;
-    if (!configured()) return;
+    if (!configured() || !restoreCheckCompleted) return;
 
     if (backupTimer) clearTimeout(backupTimer);
 
@@ -150,7 +188,11 @@ function scheduleBackup(reason = "database_change") {
 
 function installWriteWatcher(database) {
     if (!database || typeof database.prepare !== "function") {
-        throw new Error("Instância better-sqlite3 inválida.");
+        throw new Error("Instancia better-sqlite3 invalida.");
+    }
+
+    if (!restoreCheckCompleted) {
+        throw new Error("O monitor de backup nao pode iniciar antes da verificacao/restauracao remota.");
     }
 
     if (originalPrepare) return;
@@ -178,23 +220,37 @@ function installWriteWatcher(database) {
         return statement;
     };
 
-    console.log("[BACKUP] Monitor automático de alterações SQLite ativado.");
+    console.log("[BACKUP] Monitor automatico de alteracoes SQLite ativado.");
 }
 
 async function makeSnapshot() {
-    if (!db) throw new Error("Banco ainda não conectado ao backup manager.");
+    if (!db) throw new Error("Banco ainda nao conectado ao backup manager.");
 
     try { fs.rmSync(SNAPSHOT_PATH, { force: true }); } catch {}
 
     await db.backup(SNAPSHOT_PATH);
     const stat = fs.statSync(SNAPSHOT_PATH);
 
-    if (!stat.isFile() || stat.size < 100) throw new Error("Snapshot SQLite inválido.");
+    if (!stat.isFile() || stat.size < 100) {
+        throw new Error("Snapshot SQLite invalido.");
+    }
+
+    const snapshotBuffer = fs.readFileSync(SNAPSHOT_PATH);
+    if (!isValidSQLiteBuffer(snapshotBuffer)) {
+        throw new Error("Snapshot gerado nao possui cabecalho SQLite valido.");
+    }
+
     return { path: SNAPSHOT_PATH, size: stat.size };
 }
 
 async function uploadLatest(snapshotPath) {
+    assertConfigured();
+
     const fileBuffer = fs.readFileSync(snapshotPath);
+    if (!isValidSQLiteBuffer(fileBuffer)) {
+        throw new Error("Upload bloqueado: snapshot local invalido.");
+    }
+
     const existing = await getRemoteFile();
 
     const body = {
@@ -223,11 +279,13 @@ async function uploadLatest(snapshotPath) {
 }
 
 async function backupNow(reason = "manual") {
-    if (!configured()) {
-        throw new Error("GitHub backup não configurado. Verifique GITHUB_BACKUP_TOKEN, GITHUB_BACKUP_OWNER, GITHUB_BACKUP_REPO e GITHUB_BACKUP_BRANCH.");
+    assertConfigured();
+
+    if (!restoreCheckCompleted) {
+        throw new Error("Backup bloqueado: verificacao/restauracao remota ainda nao terminou.");
     }
 
-    if (!db) throw new Error("Banco ainda não conectado.");
+    if (!db) throw new Error("Banco ainda nao conectado.");
 
     if (backupRunning) {
         backupQueued = true;
@@ -263,9 +321,13 @@ async function backupNow(reason = "manual") {
 }
 
 function startPeriodicBackup() {
+    if (!restoreCheckCompleted) {
+        throw new Error("Backup periodico nao pode iniciar antes da restauracao/verificacao remota.");
+    }
+
     const interval = setInterval(() => {
-        if (!dirty || backupRunning || !configured()) return;
-        backupNow("periodic").catch((error) => console.error("[BACKUP] Falha periódica:", error.message));
+        if (!dirty || backupRunning || !configured() || !restoreCheckCompleted) return;
+        backupNow("periodic").catch((error) => console.error("[BACKUP] Falha periodica:", error.message));
     }, PERIODIC_BACKUP_MS);
 
     if (typeof interval.unref === "function") interval.unref();
@@ -279,6 +341,8 @@ function getStatus() {
         repo: GITHUB_REPO || null,
         branch: GITHUB_BRANCH || null,
         remote_path: REMOTE_PATH,
+        restore_check_completed: restoreCheckCompleted,
+        last_restore: lastRestoreResult,
         dirty,
         backup_running: backupRunning,
         last_backup_at: lastBackupAt,
@@ -288,6 +352,7 @@ function getStatus() {
 
 module.exports = {
     DB_PATH,
+    restoreLatestOnStartup,
     restoreLatestIfNeeded,
     installWriteWatcher,
     scheduleBackup,
