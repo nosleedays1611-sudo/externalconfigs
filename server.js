@@ -560,6 +560,37 @@ function getKey(value) {
     `).get(String(value || "").trim());
 }
 
+function isKeyAdminUser(user) {
+    if (!user) return false;
+
+    return (
+        String(user.role || "").toLowerCase() === "owner" ||
+        String(user.username || "").toLowerCase() === "nextaway"
+    );
+}
+
+function getAccessibleKey(value, user) {
+    const normalizedKey = String(value || "").trim();
+
+    if (isKeyAdminUser(user)) {
+        return db.prepare(`
+            SELECT *
+            FROM keys
+            WHERE key = ?
+        `).get(normalizedKey);
+    }
+
+    return db.prepare(`
+        SELECT *
+        FROM keys
+        WHERE key = ?
+          AND created_by_user_id = ?
+    `).get(
+        normalizedKey,
+        Number(user.id)
+    );
+}
+
 function checkKeyExpiration(keyData) {
     if (
         keyData.status === "active" &&
@@ -2241,7 +2272,7 @@ app.post(
                 });
             }
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.json({
@@ -2761,7 +2792,7 @@ app.post(
             const key =
                 String(req.body.key || "").trim();
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.status(404).json({
@@ -2823,7 +2854,7 @@ app.post(
             const key =
                 String(req.body.key || "").trim();
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.status(404).json({
@@ -2891,7 +2922,7 @@ app.post(
             const key =
                 String(req.body.key || "").trim();
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.status(404).json({
@@ -2986,7 +3017,7 @@ app.post(
             const key =
                 String(req.body.key || "").trim();
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.status(404).json({
@@ -3067,7 +3098,7 @@ app.delete(
             const key =
                 String(req.body.key || "").trim();
 
-            const keyData = getKey(key);
+            const keyData = getAccessibleKey(key, req.user);
 
             if (!keyData) {
                 return res.status(404).json({
@@ -3115,16 +3146,28 @@ app.get(
     authRequired,
     (req, res) => {
         try {
-            const rows = db.prepare(`
-                SELECT
-                    keys.*,
-                    users.username AS created_by_username
-                FROM keys
-                LEFT JOIN users
-                    ON users.id =
-                       keys.created_by_user_id
-                ORDER BY keys.id DESC
-            `).all();
+            const rows = isKeyAdminUser(req.user)
+                ? db.prepare(`
+                    SELECT
+                        keys.*,
+                        users.username AS created_by_username
+                    FROM keys
+                    LEFT JOIN users
+                        ON users.id =
+                           keys.created_by_user_id
+                    ORDER BY keys.id DESC
+                `).all()
+                : db.prepare(`
+                    SELECT
+                        keys.*,
+                        users.username AS created_by_username
+                    FROM keys
+                    LEFT JOIN users
+                        ON users.id =
+                           keys.created_by_user_id
+                    WHERE keys.created_by_user_id = ?
+                    ORDER BY keys.id DESC
+                `).all(req.user.id);
 
             const keys = rows.map(
                 keyData => ({

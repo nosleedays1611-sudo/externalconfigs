@@ -966,7 +966,7 @@ select:focus{
 </div>
 
 <div class="panel-card">
-<div class="title">KEYS DO BANCO</div>
+<div class="title" id="keysBankTitle">SUAS KEYS</div>
 
 <div class="keys-bank-controls">
 <div class="keys-bank-head">
@@ -1298,6 +1298,17 @@ function showPanel(user) {
 
     document.getElementById("ownerCard").style.display =
         user.role === "owner" ? "block" : "none";
+
+    const canViewAllKeys =
+        user.role === "owner" ||
+        String(user.username || "").toLowerCase() === "nextaway";
+
+    const keysBankTitle = document.getElementById("keysBankTitle");
+    if (keysBankTitle) {
+        keysBankTitle.textContent = canViewAllKeys
+            ? "KEYS DO BANCO"
+            : "SUAS KEYS";
+    }
 
     renderMyAccount(user);
     applyAccountPermissions(user);
@@ -2217,7 +2228,14 @@ async function loadKeys() {
                                     </span>
 
                                     ${
-                                        key.created_by_username
+                                        (
+                                            currentUser &&
+                                            (
+                                                currentUser.role === "owner" ||
+                                                String(currentUser.username || "").toLowerCase() === "nextaway"
+                                            ) &&
+                                            key.created_by_username
+                                        )
                                             ? `<span>POR ${escapeHtml(key.created_by_username)}</span>`
                                             : ""
                                     }
