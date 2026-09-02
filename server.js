@@ -6,6 +6,30 @@ const forge = require("node-forge");
 const { execFileSync } = require("child_process");
 const db = require("./database");
 
+// DEVICE TOKEN V3
+function ensureDeviceTokenColumns() {
+    const statements = [
+        "ALTER TABLE keys ADD COLUMN device_token_hash TEXT",
+        "ALTER TABLE device_enrollments ADD COLUMN device_token TEXT"
+    ];
+
+    for (const sql of statements) {
+        try {
+            db.prepare(sql).run();
+        } catch (error) {
+            if (
+                !String(error?.message || "")
+                    .toLowerCase()
+                    .includes("duplicate column")
+            ) {
+                throw error;
+            }
+        }
+    }
+}
+
+ensureDeviceTokenColumns();
+
 const app = express();
 
 const PORT = Number(process.env.PORT) || 80;
@@ -131,6 +155,72 @@ function checkKeyExpiration(keyData) {
     return keyData.status;
 }
 
+
+function normalizeDeviceToken(value) {
+    return String(value || "").trim();
+}
+
+function deviceTokenMatches(keyData, token) {
+    const supplied =
+        normalizeDeviceToken(token);
+
+    if (
+        !keyData ||
+        !keyData.device_token_hash ||
+        !supplied
+    ) {
+        return false;
+    }
+
+    const actual =
+        Buffer.from(
+            hashToken(supplied),
+            "hex"
+        );
+
+    const expected =
+        Buffer.from(
+            String(keyData.device_token_hash),
+            "hex"
+        );
+
+    return (
+        actual.length === expected.length &&
+        crypto.timingSafeEqual(
+            actual,
+            expected
+        )
+    );
+}
+
+function issueDeviceTokenForEnrollment(
+    keyData,
+    enrollmentId
+) {
+    const token =
+        crypto.randomBytes(32)
+            .toString("hex");
+
+    db.prepare(`
+        UPDATE keys
+        SET device_token_hash = ?
+        WHERE id = ?
+    `).run(
+        hashToken(token),
+        keyData.id
+    );
+
+    db.prepare(`
+        UPDATE device_enrollments
+        SET device_token = ?
+        WHERE id = ?
+    `).run(
+        token,
+        enrollmentId
+    );
+
+    return token;
+}
 
 function createDeviceEnrollmentSession(keyData) {
     const token = crypto.randomBytes(32).toString("hex");
@@ -1613,6 +1703,11 @@ app.post("/api/keys/check", (req, res) => {
         const key =
             String(req.body.key || "").trim();
 
+        const deviceToken =
+            normalizeDeviceToken(
+                req.body.device_token
+            );
+
         if (!key) {
             return res.status(400).json({
                 success: false,
@@ -1630,14 +1725,34 @@ app.post("/api/keys/check", (req, res) => {
             });
         }
 
-        res.json({
+        const status =
+            checkKeyExpiration(keyData);
+
+        if (
+            status === "active" &&
+            keyData.device_udid &&
+            keyData.device_token_hash &&
+            !deviceTokenMatches(
+                keyData,
+                deviceToken
+            )
+        ) {
+            return res.status(403).json({
+                success: false,
+                found: true,
+                code: "DEVICE_MISMATCH",
+                message:
+                    "Essa key já foi usada em outro dispositivo."
+            });
+        }
+
+        return res.json({
             success: true,
             found: true,
 
             key: keyData.key,
             prefix: keyData.prefix,
-            status:
-                checkKeyExpiration(keyData),
+            status,
             days:
                 getDaysFromKey(keyData),
 
@@ -1653,17 +1768,29 @@ app.post("/api/keys/check", (req, res) => {
                 keyData.remaining_ms,
 
             device_bound:
-                Boolean(keyData.device_udid),
+                Boolean(
+                    keyData.device_udid
+                ),
             device_bound_at:
-                keyData.device_bound_at
+                keyData.device_bound_at,
+
+            device_proof_required:
+                Boolean(
+                    keyData.device_udid &&
+                    !keyData.device_token_hash
+                )
         });
 
     } catch (error) {
-        console.error("Erro ao verificar key:", error);
+        console.error(
+            "Erro ao verificar key:",
+            error
+        );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Erro interno ao verificar key"
+            message:
+                "Erro interno ao verificar key"
         });
     }
 });
@@ -2094,6 +2221,7 @@ app.post(
                 SET
                     device_udid = NULL,
                     device_bound_at = NULL,
+                    device_token_hash = NULL,
                     device_reset_at = ?
                 WHERE id = ?
             `).run(
@@ -2554,6 +2682,12 @@ app.post(
                         ? checkKeyExpiration(
                               keyData
                           )
+                        : null,
+
+                device_token:
+                    enrollment.status ===
+                    "completed"
+                        ? enrollment.device_token
                         : null
             });
 
@@ -3210,6 +3344,16 @@ app.post(
                 udid
             );
 
+            const completedKey =
+                getKey(
+                    latestEnrollment.key
+                );
+
+            issueDeviceTokenForEnrollment(
+                completedKey,
+                latestEnrollment.id
+            );
+
             db.prepare(`
                 UPDATE device_enrollments
                 SET
@@ -3440,6 +3584,16 @@ app.use(
                             activateKeyAfterDeviceEnrollment(
                                 keyData,
                                 udid
+                            );
+
+                            const completedKey =
+                                getKey(
+                                    latestEnrollment.key
+                                );
+
+                            issueDeviceTokenForEnrollment(
+                                completedKey,
+                                latestEnrollment.id
                             );
 
                             db.prepare(`
