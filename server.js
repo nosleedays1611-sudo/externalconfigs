@@ -233,7 +233,7 @@ function resellerAuthRequired(req, res, next) {
 }
 
 const MERCADO_PAGO_ACCESS_TOKEN =
-    "COLOQUE_SEU_ACCESS_TOKEN_AQUI";
+    "APP_USR-3633110140034859-050122-61bd6bb16839481b26f72ed5863250d5-3373691578";
 
 function mercadoPagoAccessToken() {
     return String(
@@ -261,19 +261,26 @@ async function mercadoPagoRequest(
         throw error;
     }
 
+    const headers = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+    };
+
+    headers.Authorization =
+        `Bearer ${accessToken}`;
+
     const response =
         await fetch(
             "https://api.mercadopago.com" +
             endpoint,
             {
-                ...options,
-                headers: {
-                    Accept: "application/json",
-                    Authorization:
-                        "Bearer " +
-                        accessToken,
-                    ...(options.headers || {})
-                }
+                method:
+                    options.method ||
+                    "GET",
+                headers,
+                body:
+                    options.body
             }
         );
 
@@ -4990,6 +4997,52 @@ app.post(
                 message:
                     error.message ||
                     "Erro interno ao gerar key"
+            });
+        }
+    }
+);
+
+app.get(
+    "/api/reseller/mercadopago/status",
+    resellerAuthRequired,
+    async (req, res) => {
+        try {
+            const methods =
+                await mercadoPagoRequest(
+                    "/v1/payment_methods",
+                    { method: "GET" }
+                );
+
+            return res.json({
+                success: true,
+                configured: true,
+                pix_available:
+                    Array.isArray(methods)
+                        ? methods.some(
+                            item =>
+                                String(
+                                    item.id ||
+                                    ""
+                                ).toLowerCase() === "pix"
+                          )
+                        : true
+            });
+
+        } catch (error) {
+            console.error(
+                "Teste Mercado Pago:",
+                error.details ||
+                error
+            );
+
+            return res.status(
+                Number(error.status) || 500
+            ).json({
+                success: false,
+                configured: false,
+                message:
+                    error.message ||
+                    "Falha ao autenticar Mercado Pago"
             });
         }
     }
