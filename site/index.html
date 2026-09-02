@@ -872,7 +872,7 @@ select:focus{
 <div class="panel-card"><div class="title">GERAR KEY</div><div class="field"><label>DURA&#199;&#195;O</label><select id="rPlan"><option value="1d">1 Dia - R$ 5,11</option><option value="7d">7 Dias - R$ 14,29</option><option value="30d">30 Dias - R$ 25,90</option></select></div><button class="btn" id="rGenerate">Gerar Key</button><div class="key-result" id="rGenResult"><div class="generated-key" id="rGenKey">-</div><div class="copy-row"><button class="btn" id="rCopyKey">Copiar</button><button class="btn" id="rCheckGen">Consultar</button></div></div></div>
 <div class="panel-card"><div class="title">CHECK KEY</div><div class="field"><label>KEY</label><input id="rCheckInput" placeholder="EXTERNAL-IOS-XXXXX"></div><button class="btn" id="rCheckBtn">Consultar</button><div id="rCheckResult" style="display:none;margin-top:15px"><div class="info"><span>Status</span><span id="rCheckStatus">-</span></div><div class="info"><span>Plano</span><span id="rCheckPlan">-</span></div><div class="info"><span>Criada em</span><span id="rCheckCreated">-</span></div><div class="info"><span>Ativada em</span><span id="rCheckActivated">Nunca</span></div><div class="info"><span>Expira em</span><span id="rCheckExpires">Nunca</span></div><div class="info"><span>Dispositivo</span><span id="rCheckDevice">N&#227;o vinculado</span></div></div></div>
 <div class="panel-card"><div class="title">HIST&#211;RICO DE KEYS</div><button class="btn" id="rHistoryRefresh">Atualizar historico</button><div id="rHistory" style="margin-top:15px"></div></div></div></section>
-<div class="reseller-overlay" id="rDepositOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">DEPOSITAR VIA PIX</div><div class="user-badge">DEP&#211;SITO M&#205;NIMO: R$ 25,00</div></div><button class="icon-btn" id="rDepositClose">&#215;</button></div><div class="field"><label>VALOR DO DEPOSITO</label><input id="rAmount" type="number" min="25" step="0.01" value="25.00"></div><button class="btn btn-green" id="rCreatePix">Gerar PIX</button><div class="pix-box" id="rPixBox"><img id="rPixQr" class="pix-qr" alt="QR Code PIX"><div class="field"><label>PIX COPIA E COLA</label><textarea id="rPixCode" class="pix-copy" readonly></textarea></div><button class="btn" id="rCopyPix">Copiar PIX</button><div class="message" id="rPixStatus">Aguardando pagamento...</div></div></div></div>
+<div class="reseller-overlay" id="rDepositOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">DEPOSITAR VIA PIX</div></div><button class="icon-btn" id="rDepositClose">&#215;</button></div><div class="field"><label>VALOR DO DEP&#211;SITO</label><input id="rAmount" type="number" min="25" step="0.01" placeholder="Dep&#243;sito m&#237;nimo 25" value=""><div id="rDepositError" style="display:none;margin-top:8px;color:#ff7582;font-size:11px;font-weight:700">Valor m&#237;nimo 25</div></div><button class="btn btn-green" id="rCreatePix">Gerar PIX</button><div class="pix-box" id="rPixBox"><img id="rPixQr" class="pix-qr" alt="QR Code PIX"><div class="field"><label>PIX COPIA E COLA</label><textarea id="rPixCode" class="pix-copy" readonly></textarea></div><button class="btn" id="rCopyPix">Copiar PIX</button><div class="message" id="rPixStatus">Aguardando pagamento...</div></div></div></div>
 
 <div class="toast" id="toast"></div>
 
@@ -960,7 +960,7 @@ function escapeHtml(value) {
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+        .replaceAll("'", "\u0027");
 }
 
 function formatDate(value) {
@@ -2633,13 +2633,86 @@ function rShow(u){rMe=u;document.getElementById("auth").style.display="none";doc
 function rLogoutLocal(){rToken="";rMe=null;localStorage.removeItem(R_TOKEN_KEY);if(rPoll){clearInterval(rPoll);rPoll=null}document.getElementById("resellerPanel").style.display="none";showLogin()}
 async function rRefreshMe(){const{x:_,response,data}=await rReq("/api/reseller/me");if(!response.ok||!data.success)throw Error(data.message||"Falha ao atualizar");rShow(data.user);return data.user}
 async function rHistory(){const c=document.getElementById("rHistory");c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Carregando...</div>';try{const{response,data}=await rReq("/api/reseller/keys");if(!response.ok||!data.success)throw Error(data.message||"Erro no historico");if(!data.keys?.length){c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Nenhuma key gerada.</div>';return}c.innerHTML=data.keys.map(k=>`<div class="reseller-history-item"><div class="reseller-history-key">${escapeHtml(k.key)}</div><div class="reseller-history-meta"><span>${escapeHtml(statusText(k.status))}</span><span>${escapeHtml(String(k.days||"-"))} ${Number(k.days)===1?"dia":"dias"}</span><span>${escapeHtml(rMoney(k.price||0))}</span><span>${escapeHtml(formatDate(k.created_at))}</span></div></div>`).join("")}catch(e){c.innerHTML='<div style="color:var(--red);text-align:center;padding:10px">'+escapeHtml(e.message)+'</div>'}}
-async function rCheck(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Digite uma key.");try{const{response,data}=await rReq("/api/reseller/keys/check",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao consultar");if(!data.found)return toast("Key nao encontrada.");document.getElementById("rCheckStatus").textContent=statusText(data.status);document.getElementById("rCheckPlan").textContent=data.days?data.days+" dias":"-";document.getElementById("rCheckCreated").textContent=formatDate(data.created_at);document.getElementById("rCheckActivated").textContent=formatDate(data.activated_at);document.getElementById("rCheckExpires").textContent=formatDate(data.expires_at);document.getElementById("rCheckDevice").textContent=data.device_bound?"Vinculado":"N&#227;o vinculado";document.getElementById("rCheckResult").style.display="block"}catch(e){toast(e.message)}}
-async function rGenerate(){const plan=document.getElementById("rPlan").value;try{const{response,data}=await rReq("/api/reseller/keys/generate",{method:"POST",body:JSON.stringify({plan})});if(!response.ok||!data.success)throw Error(data.message||"N&#227;o foi poss&#237;vel gerar");document.getElementById("rGenKey").textContent=data.key;document.getElementById("rGenResult").classList.add("show");document.getElementById("rCheckInput").value=data.key;rBalance(data.balance);toast("Key gerada. "+rMoney(data.charged||rPrices[plan])+" descontados.");await rHistory()}catch(e){toast(e.message)}}
-async function rCreatePix(){const amount=Number(document.getElementById("rAmount").value);if(!Number.isFinite(amount)||amount<25)return toast("Dep&#243;sito m&#237;nimo: R$ 25,00.");try{const{response,data}=await rReq("/api/reseller/deposits/pix",{method:"POST",body:JSON.stringify({amount})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao gerar PIX");document.getElementById("rPixCode").value=data.qr_code||"";if(data.qr_code_base64)document.getElementById("rPixQr").src=data.qr_code_base64.startsWith("data:")?data.qr_code_base64:"data:image/png;base64,"+data.qr_code_base64;document.getElementById("rPixBox").classList.add("show");if(rPoll)clearInterval(rPoll);rPoll=setInterval(async()=>{try{const{x:_,response:dResp,data:d}=await rReq("/api/reseller/deposits/"+encodeURIComponent(data.payment_id)+"/status");if(dResp.ok&&d.success&&d.status==="approved"){clearInterval(rPoll);rPoll=null;rBalance(d.balance);document.getElementById("rPixStatus").textContent="Pagamento aprovado. Saldo adicionado.";toast("Dep&#243;sito aprovado.")}}catch{}},5000)}catch(e){toast(e.message)}}
+async function rCheck(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Digite uma key.");try{const{response,data}=await rReq("/api/reseller/keys/check",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao consultar");if(!data.found)return toast("Key nao encontrada.");document.getElementById("rCheckStatus").textContent=statusText(data.status);document.getElementById("rCheckPlan").textContent=data.days?data.days+" dias":"-";document.getElementById("rCheckCreated").textContent=formatDate(data.created_at);document.getElementById("rCheckActivated").textContent=formatDate(data.activated_at);document.getElementById("rCheckExpires").textContent=formatDate(data.expires_at);document.getElementById("rCheckDevice").textContent=data.device_bound?"Vinculado":"N\u00E3o vinculado";document.getElementById("rCheckResult").style.display="block"}catch(e){toast(e.message)}}
+async function rGenerate(){const plan=document.getElementById("rPlan").value;try{const{response,data}=await rReq("/api/reseller/keys/generate",{method:"POST",body:JSON.stringify({plan})});if(!response.ok||!data.success)throw Error(data.message||"N\u00E3o foi poss\u00EDvel gerar");document.getElementById("rGenKey").textContent=data.key;document.getElementById("rGenResult").classList.add("show");document.getElementById("rCheckInput").value=data.key;rBalance(data.balance);toast("Key gerada. "+rMoney(data.charged||rPrices[plan])+" descontados.");await rHistory()}catch(e){toast(e.message)}}
+async function rCreatePix(){
+    const amountInput=document.getElementById("rAmount");
+    const errorText=document.getElementById("rDepositError");
+    const amount=Number(amountInput.value);
+
+    errorText.style.display="none";
+
+    if(!Number.isFinite(amount)||amount<25){
+        errorText.textContent="Valor m\u00EDnimo 25";
+        errorText.style.display="block";
+        amountInput.focus();
+        return;
+    }
+
+    try{
+        const{response,data}=await rReq(
+            "/api/reseller/deposits/pix",
+            {
+                method:"POST",
+                body:JSON.stringify({amount})
+            }
+        );
+
+        if(!response.ok||!data.success){
+            throw Error(data.message||"Erro ao gerar PIX");
+        }
+
+        document.getElementById("rPixCode").value=data.qr_code||"";
+
+        if(data.qr_code_base64){
+            document.getElementById("rPixQr").src=
+                data.qr_code_base64.startsWith("data:")
+                    ?data.qr_code_base64
+                    :"data:image/png;base64,"+data.qr_code_base64;
+        }
+
+        document.getElementById("rPixBox").classList.add("show");
+
+        if(rPoll)clearInterval(rPoll);
+
+        rPoll=setInterval(async()=>{
+            try{
+                const{response:dResp,data:d}=await rReq(
+                    "/api/reseller/deposits/"+
+                    encodeURIComponent(data.payment_id)+
+                    "/status"
+                );
+
+                if(dResp.ok&&d.success&&d.status==="approved"){
+                    clearInterval(rPoll);
+                    rPoll=null;
+                    rBalance(d.balance);
+                    document.getElementById("rPixStatus").textContent=
+                        "Pagamento aprovado. Saldo adicionado.";
+                    toast("Dep\u00F3sito aprovado.");
+                }
+            }catch{}
+        },5000);
+
+    }catch(e){
+        toast(e.message);
+    }
+}
 document.getElementById("openResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.add("show");document.getElementById("closeResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.remove("show");document.querySelectorAll("[data-r-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-r-tab]").forEach(x=>x.classList.toggle("active",x===b));document.getElementById("rLogin").classList.toggle("active",b.dataset.rTab==="login");document.getElementById("rRegister").classList.toggle("active",b.dataset.rTab==="register")});
-document.getElementById("rLoginBtn").onclick=async()=>{const m=document.getElementById("rLoginMsg");try{const{response,data}=await rReq("/api/reseller/auth/login",{method:"POST",body:JSON.stringify({username:document.getElementById("rLoginUser").value.trim(),password:document.getElementById("rLoginPass").value})},false);if(!response.ok||!data.success||!data.token)throw Error(data.message||"Usu&#225;rio ou senha inv&#225;lidos");rToken=data.token;localStorage.setItem(R_TOKEN_KEY,rToken);rShow(data.user);await rHistory()}catch(e){m.textContent=e.message;m.className="message error"}};
-document.getElementById("rRegBtn").onclick=async()=>{const m=document.getElementById("rRegMsg");try{const{response,data}=await rReq("/api/reseller/auth/register",{method:"POST",body:JSON.stringify({username:document.getElementById("rRegUser").value.trim(),email:document.getElementById("rRegEmail").value.trim(),password:document.getElementById("rRegPass").value})},false);if(!response.ok||!data.success)throw Error(data.message||"Erro ao criar conta");m.textContent="Conta criada. Agora fa&#231;a login.";m.className="message success"}catch(e){m.textContent=e.message;m.className="message error"}};
-document.getElementById("rLogout").onclick=rLogoutLocal;document.getElementById("rRefresh").onclick=async()=>{try{await rRefreshMe();await rHistory()}catch(e){toast(e.message)}};document.getElementById("rHistoryRefresh").onclick=rHistory;document.getElementById("rGenerate").onclick=rGenerate;document.getElementById("rCheckBtn").onclick=rCheck;document.getElementById("rCheckGen").onclick=rCheck;document.getElementById("rCopyKey").onclick=async()=>{const v=document.getElementById("rGenKey").textContent.trim();if(v&&v!=="-")await navigator.clipboard.writeText(v)};document.getElementById("rDeposit").onclick=()=>document.getElementById("rDepositOverlay").classList.add("show");document.getElementById("rDepositClose").onclick=()=>document.getElementById("rDepositOverlay").classList.remove("show");document.getElementById("rCreatePix").onclick=rCreatePix;document.getElementById("rCopyPix").onclick=async()=>navigator.clipboard.writeText(document.getElementById("rPixCode").value||"");
+document.getElementById("rLoginBtn").onclick=async()=>{const m=document.getElementById("rLoginMsg");try{const{response,data}=await rReq("/api/reseller/auth/login",{method:"POST",body:JSON.stringify({username:document.getElementById("rLoginUser").value.trim(),password:document.getElementById("rLoginPass").value})},false);if(!response.ok||!data.success||!data.token)throw Error(data.message||"Usu\u00E1rio ou senha inv\u00E1lidos");rToken=data.token;localStorage.setItem(R_TOKEN_KEY,rToken);rShow(data.user);await rHistory()}catch(e){m.textContent=e.message;m.className="message error"}};
+document.getElementById("rRegBtn").onclick=async()=>{const m=document.getElementById("rRegMsg");try{const{response,data}=await rReq("/api/reseller/auth/register",{method:"POST",body:JSON.stringify({username:document.getElementById("rRegUser").value.trim(),email:document.getElementById("rRegEmail").value.trim(),password:document.getElementById("rRegPass").value})},false);if(!response.ok||!data.success)throw Error(data.message||"Erro ao criar conta");m.textContent="Conta criada. Agora fa\u00E7a login.";m.className="message success"}catch(e){m.textContent=e.message;m.className="message error"}};
+document.getElementById("rLogout").onclick=rLogoutLocal;document.getElementById("rRefresh").onclick=async()=>{try{await rRefreshMe();await rHistory()}catch(e){toast(e.message)}};document.getElementById("rHistoryRefresh").onclick=rHistory;document.getElementById("rGenerate").onclick=rGenerate;document.getElementById("rCheckBtn").onclick=rCheck;document.getElementById("rCheckGen").onclick=rCheck;document.getElementById("rCopyKey").onclick=async()=>{const v=document.getElementById("rGenKey").textContent.trim();if(v&&v!=="-")await navigator.clipboard.writeText(v)};document.getElementById("rDeposit").onclick=()=>{
+document.getElementById("rDepositError").style.display="none";
+document.getElementById("rPixBox").classList.remove("show");
+document.getElementById("rDepositOverlay").classList.add("show");
+};document.getElementById("rDepositClose").onclick=()=>{
+document.getElementById("rDepositError").style.display="none";
+document.getElementById("rDepositOverlay").classList.remove("show");
+};document.getElementById("rAmount").addEventListener("input",()=>{
+const v=Number(document.getElementById("rAmount").value);
+if(Number.isFinite(v)&&v>=25)document.getElementById("rDepositError").style.display="none";
+});
+document.getElementById("rCreatePix").onclick=rCreatePix;document.getElementById("rCopyPix").onclick=async()=>navigator.clipboard.writeText(document.getElementById("rPixCode").value||"");
 async function restoreResellerSession(){if(!rToken)return false;try{await rRefreshMe();await rHistory();return true}catch{rLogoutLocal();return false}}
 
 restoreResellerSession().then(ok=>{if(!ok)restoreSession();});
