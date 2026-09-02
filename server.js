@@ -232,9 +232,12 @@ function resellerAuthRequired(req, res, next) {
     }
 }
 
+const MERCADO_PAGO_ACCESS_TOKEN =
+    "COLOQUE_SEU_ACCESS_TOKEN_AQUI";
+
 function mercadoPagoAccessToken() {
     return String(
-        process.env.MERCADO_PAGO_ACCESS_TOKEN ||
+        MERCADO_PAGO_ACCESS_TOKEN ||
         ""
     ).trim();
 }
@@ -249,7 +252,7 @@ async function mercadoPagoRequest(
     if (!accessToken) {
         const error =
             new Error(
-                "MERCADO_PAGO_ACCESS_TOKEN nao configurado"
+                "Access Token do Mercado Pago nao configurado no server.js"
             );
 
         error.code =
@@ -5179,7 +5182,7 @@ app.post(
                     code:
                         "MERCADO_PAGO_NOT_CONFIGURED",
                     message:
-                        "Mercado Pago ainda nao foi configurado no servidor"
+                        "Access Token do Mercado Pago ainda nao foi colocado no server.js"
                 });
             }
 
