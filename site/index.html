@@ -1016,21 +1016,11 @@ select:focus{
 <button type="button" class="btn" id="clearKeySearchButton">Limpar</button>
 </div>
 
-<div class="keys-bank-actions">
-<button type="button" class="btn" id="listButton">Atualizar Lista</button>
-<button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
-</div>
-
 <div class="keys-bank-actions selection">
-<button type="button" class="btn" id="selectAllKeysButton">Selecionar Todas</button>
-<button type="button" class="btn" id="clearKeySelectionButton">Limpar Sele&#231;&#227;o</button>
+<button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
 <button type="button" class="btn" id="copySelectedKeysButton">Copiar Selecionadas</button>
 <button type="button" class="btn btn-danger" id="deleteSelectedKeysButton">Excluir Selecionadas</button>
-</div>
-
-<div class="keys-bank-danger">
 <button type="button" class="btn" id="pauseAllKeysButton" style="display:none">Pause All Keys</button>
-<button type="button" class="btn btn-danger" id="deleteAllKeysButton">Excluir Todas as Keys</button>
 </div>
 </div>
 
@@ -2376,12 +2366,6 @@ async function loadKeys() {
     }
 }
 
-document
-    .getElementById("listButton")
-    .addEventListener(
-        "click",
-        loadKeys
-    );
 
 document.getElementById("keyBankSearch").addEventListener("input", loadKeys);
 document.getElementById("clearKeySearchButton").addEventListener("click", () => {
@@ -2415,46 +2399,6 @@ document.getElementById("pauseAllKeysButton").addEventListener("click", async ()
         button.textContent = "Pause All Keys";
     }
 });
-
-document
-    .getElementById("selectAllKeysButton")
-    .addEventListener(
-        "click",
-        () => {
-            loadedBankKeys.forEach(item => {
-                selectedBankKeys.add(item.key);
-            });
-
-            document
-                .querySelectorAll("#keysList .key-select")
-                .forEach(element => {
-                    element.checked = true;
-                    element.closest(".keys-bank-item")?.classList.add("selected");
-                });
-
-            updateKeysSelectionStatus();
-            toast("Todas as keys foram selecionadas.");
-        }
-    );
-
-document
-    .getElementById("clearKeySelectionButton")
-    .addEventListener(
-        "click",
-        () => {
-            selectedBankKeys.clear();
-
-            document
-                .querySelectorAll("#keysList .key-select")
-                .forEach(element => {
-                    element.checked = false;
-                    element.closest(".keys-bank-item")?.classList.remove("selected");
-                });
-
-            updateKeysSelectionStatus();
-            toast("Sele\u00e7\u00e3o limpa.");
-        }
-    );
 
 document
     .getElementById("copySelectedKeysButton")
@@ -2491,39 +2435,6 @@ document
                 )
             ) {
                 return;
-            }
-
-            await deleteBankKeys(keys);
-        }
-    );
-
-document
-    .getElementById("deleteAllKeysButton")
-    .addEventListener(
-        "click",
-        async () => {
-            const keys = loadedBankKeys.map(item => item.key);
-
-            if (!keys.length) {
-                return toast("N\u00e3o existem keys para excluir.");
-            }
-
-            if (
-                !confirm(
-                    "ATEN\u00c7\u00c3O: excluir TODAS as " +
-                    keys.length +
-                    " keys do banco permanentemente?"
-                )
-            ) {
-                return;
-            }
-
-            const secondConfirm = prompt(
-                'Digite EXCLUIR para confirmar a exclus\u00e3o de todas as keys.'
-            );
-
-            if (String(secondConfirm || "").trim().toUpperCase() !== "EXCLUIR") {
-                return toast("Exclus\u00e3o cancelada.");
             }
 
             await deleteBankKeys(keys);
