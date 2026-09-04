@@ -1379,6 +1379,20 @@ function ownerRequired(req, res, next) {
     return next();
 }
 
+function masterOwnerRequired(req, res, next) {
+    if (
+        !req.user ||
+        normalizeUsername(req.user.username) !== MASTER_OWNER
+    ) {
+        return res.status(403).json({
+            success: false,
+            message: "Acesso permitido somente ao master owner"
+        });
+    }
+
+    return next();
+}
+
 app.post("/api/auth/login", (req, res) => {
     try {
         const username =
@@ -2781,7 +2795,7 @@ app.post("/api/keys/activate", (req, res) => {
 });
 
 /* =========================================================
-   RESET KEY
+   RESET KEY - LIBERAR DISPOSITIVO SEM ZERAR TEMPO
 ========================================================= */
 
 app.post(
@@ -2801,42 +2815,62 @@ app.post(
                 });
             }
 
+            /*
+             * Reset administrativo da key:
+             * - preserva status/ativacao/expiracao/tempo restante
+             * - remove vinculo de dispositivo e provas antigas
+             * - permite que outro dispositivo vincule novamente
+             */
+            const resetAt = nowISO();
+
             db.prepare(`
                 UPDATE keys
                 SET
-                    status = 'unused',
-                    activated_at = NULL,
-                    expires_at = NULL,
-                    paused_at = NULL,
-                    remaining_ms = NULL
+                    device_udid = NULL,
+                    device_bound_at = NULL,
+                    device_token_hash = NULL,
+                    device_reset_at = ?
                 WHERE id = ?
+            `).run(
+                resetAt,
+                keyData.id
+            );
+
+            db.prepare(`
+                DELETE FROM device_enrollments
+                WHERE key_id = ?
             `).run(keyData.id);
+
+            const fresh = getKey(keyData.key);
+            const status = checkKeyExpiration(fresh);
 
             logAction(
                 req.user.id,
-                "reset_key",
+                "reset_key_device_info",
                 "key",
                 keyData.key
             );
 
             res.json({
                 success: true,
-                message: "Key resetada com sucesso",
+                message: "Informações de dispositivo resetadas. O tempo da key foi preservado.",
                 key: keyData.key,
-                status: "unused",
-                days:
-                    getDaysFromKey(keyData),
-                device_bound:
-                    Boolean(keyData.device_udid)
+                status,
+                days: getDaysFromKey(fresh),
+                activated_at: fresh.activated_at,
+                expires_at: fresh.expires_at,
+                paused_at: fresh.paused_at,
+                remaining_ms: fresh.remaining_ms,
+                device_bound: false,
+                device_reset_at: resetAt
             });
 
         } catch (error) {
-            console.error("Erro ao resetar key:", error);
+            console.error("Erro ao resetar informações da key:", error);
 
             res.status(500).json({
                 success: false,
-                message:
-                    "Erro interno ao resetar key"
+                message: "Erro interno ao resetar informações da key"
             });
         }
     }
@@ -3081,6 +3115,104 @@ app.post(
                 success: false,
                 message:
                     "Erro interno ao retomar key"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   PAUSAR TODAS AS KEYS - OWNER
+========================================================= */
+
+app.post(
+    "/api/admin/keys/pause-all",
+    authRequired,
+    ownerRequired,
+    (req, res) => {
+        try {
+            const rows = db.prepare(`
+                SELECT *
+                FROM keys
+                WHERE status = 'active'
+                ORDER BY id ASC
+            `).all();
+
+            let paused = 0;
+            let expired = 0;
+
+            const tx = db.transaction(() => {
+                for (const keyData of rows) {
+                    const status = checkKeyExpiration(keyData);
+
+                    if (status === "expired") {
+                        expired += 1;
+                        continue;
+                    }
+
+                    if (status !== "active") {
+                        continue;
+                    }
+
+                    const expiresAt = keyData.expires_at
+                        ? new Date(keyData.expires_at).getTime()
+                        : 0;
+
+                    const remaining = expiresAt
+                        ? Math.max(0, expiresAt - Date.now())
+                        : 0;
+
+                    if (remaining <= 0) {
+                        db.prepare(`
+                            UPDATE keys
+                            SET status = 'expired'
+                            WHERE id = ?
+                        `).run(keyData.id);
+                        expired += 1;
+                        continue;
+                    }
+
+                    db.prepare(`
+                        UPDATE keys
+                        SET
+                            status = 'paused',
+                            paused_at = ?,
+                            remaining_ms = ?
+                        WHERE id = ?
+                    `).run(
+                        nowISO(),
+                        remaining,
+                        keyData.id
+                    );
+
+                    paused += 1;
+                }
+            });
+
+            tx();
+
+            logAction(
+                req.user.id,
+                "pause_all_keys",
+                "keys",
+                String(paused)
+            );
+
+            return res.json({
+                success: true,
+                paused,
+                expired,
+                message:
+                    paused === 1
+                        ? "1 key foi pausada."
+                        : `${paused} keys foram pausadas.`
+            });
+
+        } catch (error) {
+            console.error("Erro ao pausar todas as keys:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao pausar todas as keys"
             });
         }
     }
@@ -4394,6 +4526,251 @@ p{margin:0;color:rgba(255,255,255,.68);line-height:1.45}
 /* =========================================================
    REVENDEDOR - CADASTRO / LOGIN
 ========================================================= */
+
+/* =========================================================
+   MASTER OWNER - ADMINISTRAR REVENDEDORES
+========================================================= */
+
+app.get(
+    "/api/admin/resellers",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const rows = db.prepare(`
+                SELECT
+                    r.*,
+                    (
+                        SELECT COUNT(*)
+                        FROM reseller_keys rk
+                        WHERE rk.reseller_id = r.id
+                    ) AS keys_generated,
+                    (
+                        SELECT COALESCE(SUM(rd.amount_cents), 0)
+                        FROM reseller_deposits rd
+                        WHERE rd.reseller_id = r.id
+                          AND rd.credited = 1
+                    ) AS credited_deposits_cents
+                FROM resellers r
+                ORDER BY r.id DESC
+            `).all();
+
+            const resellers = rows.map(row => ({
+                ...resellerPublic(row),
+                keys_generated: Number(row.keys_generated || 0),
+                credited_deposits:
+                    Number(row.credited_deposits_cents || 0) / 100
+            }));
+
+            return res.json({
+                success: true,
+                total: resellers.length,
+                resellers
+            });
+        } catch (error) {
+            console.error("Erro ao listar revendedores:", error);
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao listar revendedores"
+            });
+        }
+    }
+);
+
+app.post(
+    "/api/admin/resellers/update",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const id = Number(req.body.id);
+            const username = normalizeUsername(req.body.username);
+            const email = String(req.body.email || "").trim().toLowerCase();
+
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json({success:false,message:"ID inválido"});
+            }
+
+            if (!/^[a-z0-9_.-]{3,32}$/.test(username)) {
+                return res.status(400).json({success:false,message:"Usuário inválido"});
+            }
+
+            if (!/^\S+@\S+\.\S+$/.test(email)) {
+                return res.status(400).json({success:false,message:"E-mail inválido"});
+            }
+
+            const exists = db.prepare(`
+                SELECT id
+                FROM resellers
+                WHERE (LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?))
+                  AND id <> ?
+            `).get(username, email, id);
+
+            if (exists) {
+                return res.status(409).json({
+                    success:false,
+                    message:"Usuário ou e-mail já está em uso"
+                });
+            }
+
+            const result = db.prepare(`
+                UPDATE resellers
+                SET username = ?, email = ?
+                WHERE id = ?
+            `).run(username, email, id);
+
+            if (result.changes !== 1) {
+                return res.status(404).json({success:false,message:"Revendedor não encontrado"});
+            }
+
+            return res.json({success:true,message:"Revendedor atualizado"});
+        } catch (error) {
+            console.error("Erro ao atualizar revendedor:", error);
+            return res.status(500).json({success:false,message:"Erro interno ao atualizar revendedor"});
+        }
+    }
+);
+
+app.post(
+    "/api/admin/resellers/balance",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const id = Number(req.body.id);
+            const operation = String(req.body.operation || "add").toLowerCase();
+            const amount = Number(req.body.amount);
+
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json({success:false,message:"ID inválido"});
+            }
+
+            if (!Number.isFinite(amount) || amount < 0) {
+                return res.status(400).json({success:false,message:"Valor inválido"});
+            }
+
+            const cents = Math.round(amount * 100);
+            const reseller = db.prepare(`SELECT * FROM resellers WHERE id = ?`).get(id);
+
+            if (!reseller) {
+                return res.status(404).json({success:false,message:"Revendedor não encontrado"});
+            }
+
+            let newBalance = Number(reseller.balance_cents || 0);
+
+            if (operation === "set") {
+                newBalance = cents;
+            } else if (operation === "subtract") {
+                newBalance = Math.max(0, newBalance - cents);
+            } else if (operation === "add") {
+                newBalance += cents;
+            } else {
+                return res.status(400).json({success:false,message:"Operação de saldo inválida"});
+            }
+
+            db.prepare(`
+                UPDATE resellers
+                SET balance_cents = ?
+                WHERE id = ?
+            `).run(newBalance, id);
+
+            return res.json({
+                success:true,
+                balance:newBalance / 100,
+                message:"Saldo atualizado"
+            });
+        } catch (error) {
+            console.error("Erro ao alterar saldo do revendedor:", error);
+            return res.status(500).json({success:false,message:"Erro interno ao alterar saldo"});
+        }
+    }
+);
+
+app.post(
+    "/api/admin/resellers/status",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const id = Number(req.body.id);
+            const enabled = req.body.enabled ? 1 : 0;
+
+            const result = db.prepare(`
+                UPDATE resellers
+                SET enabled = ?
+                WHERE id = ?
+            `).run(enabled, id);
+
+            if (result.changes !== 1) {
+                return res.status(404).json({success:false,message:"Revendedor não encontrado"});
+            }
+
+            if (!enabled) {
+                db.prepare(`DELETE FROM reseller_sessions WHERE reseller_id = ?`).run(id);
+            }
+
+            return res.json({success:true,message: enabled ? "Revendedor ativado" : "Revendedor desativado"});
+        } catch (error) {
+            console.error("Erro ao alterar status do revendedor:", error);
+            return res.status(500).json({success:false,message:"Erro interno ao alterar status"});
+        }
+    }
+);
+
+app.post(
+    "/api/admin/resellers/password",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const id = Number(req.body.id);
+            const password = String(req.body.password || "");
+
+            if (password.length < 8) {
+                return res.status(400).json({success:false,message:"A senha precisa ter pelo menos 8 caracteres"});
+            }
+
+            const {salt, hash} = hashPassword(password);
+            const result = db.prepare(`
+                UPDATE resellers
+                SET password_hash = ?, password_salt = ?
+                WHERE id = ?
+            `).run(hash, salt, id);
+
+            if (result.changes !== 1) {
+                return res.status(404).json({success:false,message:"Revendedor não encontrado"});
+            }
+
+            db.prepare(`DELETE FROM reseller_sessions WHERE reseller_id = ?`).run(id);
+
+            return res.json({success:true,message:"Senha alterada. Sessões antigas foram encerradas."});
+        } catch (error) {
+            console.error("Erro ao alterar senha do revendedor:", error);
+            return res.status(500).json({success:false,message:"Erro interno ao alterar senha"});
+        }
+    }
+);
+
+app.delete(
+    "/api/admin/resellers/delete",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const id = Number(req.body.id);
+            const result = db.prepare(`DELETE FROM resellers WHERE id = ?`).run(id);
+
+            if (result.changes !== 1) {
+                return res.status(404).json({success:false,message:"Revendedor não encontrado"});
+            }
+
+            return res.json({success:true,message:"Revendedor excluído"});
+        } catch (error) {
+            console.error("Erro ao excluir revendedor:", error);
+            return res.status(500).json({success:false,message:"Erro interno ao excluir revendedor"});
+        }
+    }
+);
 
 app.post(
     "/api/reseller/auth/register",

@@ -819,6 +819,44 @@ select:focus{
 }
 
 
+/* ACCOUNT CLEAN / ADMIN */
+.account-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.account-summary-box{padding:13px;border:1px solid rgba(255,255,255,.07);border-radius:15px;background:rgba(255,255,255,.022)}
+.account-summary-box b{display:block;font-size:8px;letter-spacing:.9px;color:#747a82;margin-bottom:5px}
+.account-summary-box span{font-size:12px;color:#f0f1f3;font-weight:700;word-break:break-word}
+.account-details{margin-top:10px;border-top:1px solid rgba(255,255,255,.055);padding-top:8px}
+.account-details summary,.user-manage-details summary{cursor:pointer;color:#8e949d;font-size:10px;font-weight:750;letter-spacing:.5px;padding:8px 0;list-style:none}
+.account-details summary::-webkit-details-marker,.user-manage-details summary::-webkit-details-marker{display:none}
+.account-details summary:after,.user-manage-details summary:after{content:'+';float:right;color:#70767f;font-size:14px}
+.account-details[open] summary:after,.user-manage-details[open] summary:after{content:'-'}
+.owner-admin-layout{display:grid;grid-template-columns:minmax(250px,.85fr) minmax(320px,1.15fr);gap:12px;align-items:start}
+.admin-section{padding:14px;border:1px solid rgba(255,255,255,.065);border-radius:17px;background:rgba(255,255,255,.018)}
+.admin-section-title{font-size:9px;font-weight:800;letter-spacing:1.1px;color:#9ca1a9;margin-bottom:12px}
+.admin-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.admin-toolbar .btn{width:auto;margin:0;padding:10px 13px;font-size:10px}
+.user-row{padding:13px 0}
+.user-compact-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}
+.user-compact-meta span{font-size:9px;color:#858b93;padding:5px 7px;border-radius:9px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.055)}
+.user-manage-details{margin-top:9px;border-top:1px solid rgba(255,255,255,.045)}
+.key-search-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px}
+.key-search-row .btn{width:auto;margin:0;padding:0 14px}
+.master-only{display:none}
+.reseller-admin-modal{width:min(920px,100%)}
+.reseller-admin-toolbar{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px}
+.reseller-admin-toolbar .btn{width:auto;margin:0}
+.reseller-admin-list{display:grid;gap:9px}
+.reseller-admin-card{padding:14px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.02)}
+.reseller-admin-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.reseller-admin-name{font-size:12px;font-weight:800;color:#f1f2f4}
+.reseller-admin-email{font-size:9px;color:#737a83;margin-top:3px;word-break:break-all}
+.reseller-admin-balance{font-size:15px;font-weight:800;color:#f1f2f4;white-space:nowrap}
+.reseller-admin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.reseller-admin-stat{padding:8px;border-radius:11px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.045)}
+.reseller-admin-stat b{display:block;font-size:8px;color:#6f757d;margin-bottom:3px}.reseller-admin-stat span{font-size:10px;color:#d7d9dd}
+.reseller-admin-actions{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}
+.reseller-admin-actions .btn{margin:0;padding:9px 6px;font-size:9px}
+@media(max-width:760px){.account-summary-grid{grid-template-columns:1fr 1fr}.owner-admin-layout{grid-template-columns:1fr}.reseller-admin-actions{grid-template-columns:1fr 1fr}.reseller-admin-stats{grid-template-columns:1fr 1fr}.key-search-row{grid-template-columns:1fr}.key-search-row .btn{width:100%;padding:10px}}
+
 /* REVENDEDOR */
 .reseller-link{display:block;margin:15px auto 0;background:transparent;border:0;color:#aeb3bb;font-size:11px;letter-spacing:.9px;cursor:pointer}.reseller-link:hover{color:#fff;text-decoration:underline}
 .reseller-overlay{position:fixed;inset:0;z-index:12000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.68);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.reseller-overlay.show{display:flex}
@@ -973,6 +1011,11 @@ select:focus{
 <div class="keys-bank-status" id="keysSelectionStatus">0 selecionadas</div>
 </div>
 
+<div class="key-search-row">
+<input id="keyBankSearch" autocomplete="off" placeholder="Pesquisar key rapidamente...">
+<button type="button" class="btn" id="clearKeySearchButton">Limpar</button>
+</div>
+
 <div class="keys-bank-actions">
 <button type="button" class="btn" id="listButton">Atualizar Lista</button>
 <button type="button" class="btn" id="copyAllKeysButton">Copiar Todas</button>
@@ -986,6 +1029,7 @@ select:focus{
 </div>
 
 <div class="keys-bank-danger">
+<button type="button" class="btn" id="pauseAllKeysButton" style="display:none">Pause All Keys</button>
 <button type="button" class="btn btn-danger" id="deleteAllKeysButton">Excluir Todas as Keys</button>
 </div>
 </div>
@@ -1000,63 +1044,44 @@ select:focus{
 <div id="tabAccount" class="tab-page">
 
 <div class="panel-card" id="accountCard">
-<div class="title">CONTA</div>
-<div class="info"><span>Usu&#225;rio</span><span id="meUsername">&#8212;</span></div>
-<div class="info"><span>Cargo</span><span id="meRole">&#8212;</span></div>
-<div class="info"><span>Status</span><span id="meStatus">&#8212;</span></div>
+<div class="title">MINHA CONTA</div>
+<div class="account-summary-grid">
+<div class="account-summary-box"><b>USUÁRIO</b><span id="meUsername">&#8212;</span></div>
+<div class="account-summary-box"><b>CARGO</b><span id="meRole">&#8212;</span></div>
+<div class="account-summary-box"><b>STATUS</b><span id="meStatus">&#8212;</span></div>
+<div class="account-summary-box"><b>KEYS</b><span id="meKeysGenerated">0</span></div>
+</div>
+<details class="account-details">
+<summary>Ver detalhes da conta</summary>
 <div class="info"><span>Plano</span><span id="mePlan">&#8212;</span></div>
 <div class="info"><span>Ativada em</span><span id="meActivated">Nunca</span></div>
 <div class="info"><span>Expira em</span><span id="meExpires">Nunca</span></div>
 <div class="info"><span>Limite de keys</span><span id="meKeyLimit">Ilimitado</span></div>
-<div class="info"><span>Keys geradas</span><span id="meKeysGenerated">0</span></div>
 <div class="info"><span>Keys restantes</span><span id="meKeysRemaining">Ilimitado</span></div>
+</details>
+<div class="admin-toolbar" id="masterTools" style="display:none;margin-top:12px">
+<button type="button" class="btn" id="openResellerAdmin">Revendedores</button>
+</div>
 </div>
 
 <div class="panel-card" id="ownerCard">
-<div class="title">ADMINISTRA&#199;&#195;O DE USU&#193;RIOS</div>
-
-<div class="field">
-<label>NOVO USU&#193;RIO</label>
-<input id="newUsername" maxlength="32" autocomplete="off" placeholder="usuario">
-</div>
-
-<div class="field">
-<label>SENHA</label>
-<input id="newPassword" type="password" autocomplete="new-password" placeholder="M&#237;nimo 8 caracteres">
-</div>
-
-<div class="field">
-<label>CARGO</label>
-<select id="newRole">
-<option value="user">User</option>
-<option value="owner">Owner</option>
-</select>
-</div>
-
-<div class="field">
-<label>VALIDADE DA CONTA</label>
-<select id="newAccountPlan">
-<option value="1d">1 Dia</option>
-<option value="7d">7 Dias</option>
-<option value="30d">30 Dias</option>
-<option value="custom">Personalizado</option>
-<option value="lifetime">Lifetime</option>
-</select>
-</div>
-
-<div class="field" id="newAccountCustomDaysField" style="display:none">
-<label>DIAS DA CONTA</label>
-<input id="newAccountDays" type="number" min="1" max="36500" step="1" placeholder="Ex.: 365">
-</div>
-
-<div class="field">
-<label>LIMITE TOTAL DE KEYS</label>
-<input id="newKeyLimit" type="number" min="0" step="1" placeholder="Vazio = ilimitado">
-</div>
-
+<div class="title">ADMINISTRAÇÃO</div>
+<div class="owner-admin-layout">
+<div class="admin-section">
+<div class="admin-section-title">CRIAR NOVA CONTA</div>
+<div class="field"><label>NOVO USUÁRIO</label><input id="newUsername" maxlength="32" autocomplete="off" placeholder="usuario"></div>
+<div class="field"><label>SENHA</label><input id="newPassword" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></div>
+<div class="field"><label>CARGO</label><select id="newRole"><option value="user">User</option><option value="owner">Owner</option></select></div>
+<div class="field"><label>VALIDADE</label><select id="newAccountPlan"><option value="1d">1 Dia</option><option value="7d">7 Dias</option><option value="30d">30 Dias</option><option value="custom">Personalizado</option><option value="lifetime">Lifetime</option></select></div>
+<div class="field" id="newAccountCustomDaysField" style="display:none"><label>DIAS</label><input id="newAccountDays" type="number" min="1" max="36500" step="1" placeholder="Ex.: 365"></div>
+<div class="field"><label>LIMITE TOTAL DE KEYS</label><input id="newKeyLimit" type="number" min="0" step="1" placeholder="Vazio = ilimitado"></div>
 <button type="button" class="btn btn-green" id="createUserButton">Criar Conta</button>
-
-<div id="usersList" style="margin-top:18px"></div>
+</div>
+<div class="admin-section">
+<div class="admin-section-title">CONTAS CADASTRADAS</div>
+<div id="usersList"></div>
+</div>
+</div>
 </div>
 
 </div>
@@ -1073,6 +1098,21 @@ select:focus{
 <div class="panel-card"><div class="title">CHECK KEY</div><div class="field"><label>KEY</label><input id="rCheckInput" placeholder="EXTERNAL-IOS-XXXXX"></div><button class="btn" id="rCheckBtn">Consultar</button><div id="rCheckResult" style="display:none;margin-top:15px"><div class="info"><span>Status</span><span id="rCheckStatus">-</span></div><div class="info"><span>Plano</span><span id="rCheckPlan">-</span></div><div class="info"><span>Criada em</span><span id="rCheckCreated">-</span></div><div class="info"><span>Ativada em</span><span id="rCheckActivated">Nunca</span></div><div class="info"><span>Expira em</span><span id="rCheckExpires">Nunca</span></div><div class="info"><span>Dispositivo</span><span id="rCheckDevice">N&#227;o vinculado</span></div></div></div>
 <div class="panel-card"><div class="title">HIST&#211;RICO DE KEYS</div><button class="btn" id="rHistoryRefresh">Atualizar historico</button><div id="rHistory" style="margin-top:15px"></div></div></div></section>
 <div class="reseller-overlay" id="rDepositOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">DEPOSITAR VIA PIX</div></div><button class="icon-btn" id="rDepositClose">&#215;</button></div><div class="field"><label>VALOR DO DEP&#211;SITO</label><input id="rAmount" type="number" min="25" step="0.01" placeholder="Dep&#243;sito m&#237;nimo 25" value=""><div id="rDepositError" style="display:none;margin-top:8px;color:#ff7582;font-size:11px;font-weight:700">Valor m&#237;nimo 25</div></div><button class="btn btn-green" id="rCreatePix">Gerar PIX</button><div class="pix-box" id="rPixBox"><img id="rPixQr" class="pix-qr" alt="QR Code PIX"><div class="field"><label>PIX COPIA E COLA</label><textarea id="rPixCode" class="pix-copy" readonly></textarea></div><button class="btn" id="rCopyPix">Copiar PIX</button><div class="message" id="rPixStatus">Aguardando pagamento...</div></div></div></div>
+
+
+<div class="reseller-overlay" id="resellerAdminOverlay">
+<div class="reseller-modal reseller-admin-modal">
+<div class="reseller-modal-head">
+<div><div class="reseller-modal-title">REVENDEDORES</div><div class="user-badge">ADMINISTRAÇÃO MASTER</div></div>
+<button type="button" class="icon-btn" id="closeResellerAdmin">&#215;</button>
+</div>
+<div class="reseller-admin-toolbar">
+<input id="resellerAdminSearch" autocomplete="off" placeholder="Pesquisar revendedor...">
+<button type="button" class="btn" id="refreshResellerAdmin">Atualizar</button>
+</div>
+<div id="resellerAdminList" class="reseller-admin-list"></div>
+</div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -1303,11 +1343,24 @@ function showPanel(user) {
         user.role === "owner" ||
         String(user.username || "").toLowerCase() === "nextaway";
 
+    const isMaster =
+        String(user.username || "").toLowerCase() === "nextaway";
+
     const keysBankTitle = document.getElementById("keysBankTitle");
     if (keysBankTitle) {
         keysBankTitle.textContent = canViewAllKeys
             ? "KEYS DO BANCO"
             : "SUAS KEYS";
+    }
+
+    const pauseAllKeysButton = document.getElementById("pauseAllKeysButton");
+    if (pauseAllKeysButton) {
+        pauseAllKeysButton.style.display = canViewAllKeys ? "block" : "none";
+    }
+
+    const masterTools = document.getElementById("masterTools");
+    if (masterTools) {
+        masterTools.style.display = isMaster ? "flex" : "none";
     }
 
     renderMyAccount(user);
@@ -1866,7 +1919,7 @@ document
         async () => {
             if (
                 !confirm(
-                    "Resetar esta key? O status voltar\u00E1 para N\u00C3O ATIVADA. O UDID continuar\u00E1 vinculado."
+                    "Liberar esta key para outro dispositivo? O status e o tempo atual ser\u00E3o preservados; UDID e informa\u00E7\u00F5es do dispositivo ser\u00E3o removidos."
                 )
             ) {
                 return;
@@ -2185,8 +2238,27 @@ async function loadKeys() {
             return;
         }
 
+        const searchTerm = String(
+            document.getElementById("keyBankSearch")?.value || ""
+        ).trim().toLowerCase();
+
+        const visibleBankKeys = searchTerm
+            ? loadedBankKeys.filter(item =>
+                String(item.key || "").toLowerCase().includes(searchTerm) ||
+                String(item.created_by_username || "").toLowerCase().includes(searchTerm) ||
+                String(statusText(item.status) || "").toLowerCase().includes(searchTerm)
+            )
+            : loadedBankKeys;
+
+        if (!visibleBankKeys.length) {
+            container.innerHTML =
+                '<div style="color:#777;font-size:12px;text-align:center;padding:10px">Nenhuma key encontrada para essa pesquisa.</div>';
+            updateKeysSelectionStatus();
+            return;
+        }
+
         container.innerHTML =
-            loadedBankKeys
+            visibleBankKeys
                 .map(
                     key => `
                         <div class="list-item keys-bank-item ${selectedBankKeys.has(key.key) ? "selected" : ""}">
@@ -2311,6 +2383,39 @@ document
         loadKeys
     );
 
+document.getElementById("keyBankSearch").addEventListener("input", loadKeys);
+document.getElementById("clearKeySearchButton").addEventListener("click", () => {
+    document.getElementById("keyBankSearch").value = "";
+    loadKeys();
+});
+
+document.getElementById("pauseAllKeysButton").addEventListener("click", async () => {
+    if (!confirm("Pausar o tempo de TODAS as keys ativas existentes?")) return;
+
+    const button = document.getElementById("pauseAllKeysButton");
+    button.disabled = true;
+    button.textContent = "Pausando...";
+
+    try {
+        const {response, data} = await request("/api/admin/keys/pause-all", {
+            method: "POST",
+            body: JSON.stringify({})
+        });
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao pausar todas as keys.");
+        }
+
+        toast(data.message || "Keys pausadas.");
+        await loadKeys();
+    } catch (error) {
+        toast(error.message);
+    } finally {
+        button.disabled = false;
+        button.textContent = "Pause All Keys";
+    }
+});
+
 document
     .getElementById("selectAllKeysButton")
     .addEventListener(
@@ -2432,64 +2537,14 @@ ADMIN USU\u00C1RIOS
 */
 
 function userDetailsHtml(user) {
-    const unlimited =
-        user.unlimited_keys ||
-        user.key_limit === null;
+    const unlimited = user.unlimited_keys || user.key_limit === null;
 
     return `
-        <div class="account-grid">
-            <div class="account-mini">
-                <b>STATUS</b>
-                <span>${escapeHtml(accountStatusText(user.account_status))}</span>
-            </div>
-
-            <div class="account-mini">
-                <b>PLANO</b>
-                <span>${escapeHtml(accountPlanText(user))}</span>
-            </div>
-
-            <div class="account-mini">
-                <b>ATIVADA</b>
-                <span>${escapeHtml(formatDate(user.activated_at))}</span>
-            </div>
-
-            <div class="account-mini">
-                <b>EXPIRA</b>
-                <span>${
-                    user.account_plan === "lifetime"
-                        ? "Lifetime"
-                        : escapeHtml(formatDate(user.expires_at))
-                }</span>
-            </div>
-
-            <div class="account-mini">
-                <b>KEYS</b>
-                <span>
-                    ${Number(user.keys_generated || 0)} geradas /
-                    ${unlimited ? "ilimitado" : Number(user.key_limit)}
-                </span>
-            </div>
-
-            <div class="account-mini">
-                <b>RESTANTES</b>
-                <span>
-                    ${
-                        unlimited
-                            ? "Ilimitado"
-                            : Number(user.keys_remaining ?? 0)
-                    }
-                </span>
-            </div>
-
-            <div class="account-mini">
-                <b>CRIADA POR</b>
-                <span>${escapeHtml(user.created_by || "\u2014")}</span>
-            </div>
-
-            <div class="account-mini">
-                <b>\u00DALTIMO LOGIN</b>
-                <span>${escapeHtml(formatDate(user.last_login_at))}</span>
-            </div>
+        <div class="user-compact-meta">
+            <span>${escapeHtml(accountStatusText(user.account_status))}</span>
+            <span>${escapeHtml(accountPlanText(user))}</span>
+            <span>${Number(user.keys_generated || 0)} keys</span>
+            <span>${user.account_plan === "lifetime" ? "Lifetime" : escapeHtml(formatDate(user.expires_at))}</span>
         </div>
     `;
 }
@@ -2510,6 +2565,8 @@ function editControlsHtml(user) {
             : Number(user.key_limit);
 
     return `
+        <details class="user-manage-details">
+        <summary>Gerenciar conta</summary>
         <div class="user-edit">
             <div class="field">
                 <label>CARGO</label>
@@ -2586,6 +2643,7 @@ function editControlsHtml(user) {
                 Excluir
             </button>
         </div>
+        </details>
     `;
 }
 
@@ -3129,6 +3187,154 @@ document.querySelectorAll(".tab-btn").forEach(button => {
 });
 
 
+
+/* MASTER OWNER - ADMINISTRAR REVENDEDORES */
+let masterResellers = [];
+
+function moneyBR(value) {
+    return Number(value || 0).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+    });
+}
+
+async function loadMasterResellers() {
+    const container = document.getElementById("resellerAdminList");
+    if (!container) return;
+
+    container.innerHTML = '<div style="color:#777;font-size:12px;text-align:center;padding:14px">Carregando...</div>';
+
+    try {
+        const {response, data} = await request("/api/admin/resellers");
+        if (!response.ok || !data.success) throw new Error(data.message || "Erro ao listar revendedores.");
+
+        masterResellers = Array.isArray(data.resellers) ? data.resellers : [];
+        renderMasterResellers();
+    } catch (error) {
+        container.innerHTML = '<div style="color:var(--red);font-size:11px;text-align:center;padding:14px">' + escapeHtml(error.message) + '</div>';
+    }
+}
+
+function renderMasterResellers() {
+    const container = document.getElementById("resellerAdminList");
+    const term = String(document.getElementById("resellerAdminSearch")?.value || "").trim().toLowerCase();
+    const rows = term
+        ? masterResellers.filter(r => String(r.username || "").toLowerCase().includes(term) || String(r.email || "").toLowerCase().includes(term))
+        : masterResellers;
+
+    if (!rows.length) {
+        container.innerHTML = '<div style="color:#777;font-size:11px;text-align:center;padding:14px">Nenhum revendedor encontrado.</div>';
+        return;
+    }
+
+    container.innerHTML = rows.map(r => `
+        <div class="reseller-admin-card">
+            <div class="reseller-admin-head">
+                <div>
+                    <div class="reseller-admin-name">${escapeHtml(r.username)}</div>
+                    <div class="reseller-admin-email">${escapeHtml(r.email)}</div>
+                </div>
+                <div class="reseller-admin-balance">${escapeHtml(moneyBR(r.balance))}</div>
+            </div>
+            <div class="reseller-admin-stats">
+                <div class="reseller-admin-stat"><b>STATUS</b><span>${r.enabled ? "ATIVO" : "DESATIVADO"}</span></div>
+                <div class="reseller-admin-stat"><b>KEYS GERADAS</b><span>${Number(r.keys_generated || 0)}</span></div>
+                <div class="reseller-admin-stat"><b>ÚLTIMO LOGIN</b><span>${escapeHtml(formatDate(r.last_login_at))}</span></div>
+            </div>
+            <div class="reseller-admin-actions">
+                <button class="btn reseller-add-balance" data-id="${Number(r.id)}">+ Saldo</button>
+                <button class="btn reseller-set-balance" data-id="${Number(r.id)}">Definir Saldo</button>
+                <button class="btn reseller-edit" data-id="${Number(r.id)}">Editar</button>
+                <button class="btn reseller-password" data-id="${Number(r.id)}">Senha</button>
+                <button class="btn ${r.enabled ? "btn-danger" : "btn-green"} reseller-status" data-id="${Number(r.id)}" data-enabled="${r.enabled ? "1" : "0"}">${r.enabled ? "Desativar" : "Ativar"}</button>
+            </div>
+            <button class="btn btn-danger reseller-delete" data-id="${Number(r.id)}" style="margin-top:7px">Excluir Revendedor</button>
+        </div>
+    `).join("");
+
+    bindMasterResellerActions();
+}
+
+async function resellerAdminRequest(endpoint, body, method = "POST") {
+    const {response, data} = await request(endpoint, {
+        method,
+        body: JSON.stringify(body)
+    });
+    if (!response.ok || !data.success) throw new Error(data.message || "Operação não realizada.");
+    return data;
+}
+
+function findMasterReseller(id) {
+    return masterResellers.find(r => Number(r.id) === Number(id));
+}
+
+function bindMasterResellerActions() {
+    document.querySelectorAll(".reseller-add-balance").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const raw = prompt("Valor para ADICIONAR ao saldo (R$):", "25");
+        if (raw === null) return;
+        const amount = Number(String(raw).replace(",", "."));
+        if (!Number.isFinite(amount) || amount <= 0) return toast("Valor inválido.");
+        try { await resellerAdminRequest("/api/admin/resellers/balance", {id, operation:"add", amount}); toast("Saldo adicionado."); await loadMasterResellers(); }
+        catch (e) { toast(e.message); }
+    });
+
+    document.querySelectorAll(".reseller-set-balance").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const current = findMasterReseller(id);
+        const raw = prompt("Definir saldo total (R$):", String(current?.balance ?? 0));
+        if (raw === null) return;
+        const amount = Number(String(raw).replace(",", "."));
+        if (!Number.isFinite(amount) || amount < 0) return toast("Valor inválido.");
+        try { await resellerAdminRequest("/api/admin/resellers/balance", {id, operation:"set", amount}); toast("Saldo definido."); await loadMasterResellers(); }
+        catch (e) { toast(e.message); }
+    });
+
+    document.querySelectorAll(".reseller-edit").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const current = findMasterReseller(id);
+        if (!current) return;
+        const username = prompt("Usuário:", current.username);
+        if (username === null) return;
+        const email = prompt("E-mail:", current.email);
+        if (email === null) return;
+        try { await resellerAdminRequest("/api/admin/resellers/update", {id, username, email}); toast("Revendedor atualizado."); await loadMasterResellers(); }
+        catch (e) { toast(e.message); }
+    });
+
+    document.querySelectorAll(".reseller-password").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const password = prompt("Nova senha (mínimo 8 caracteres):");
+        if (password === null) return;
+        if (password.length < 8) return toast("A senha precisa ter pelo menos 8 caracteres.");
+        try { await resellerAdminRequest("/api/admin/resellers/password", {id, password}); toast("Senha alterada."); }
+        catch (e) { toast(e.message); }
+    });
+
+    document.querySelectorAll(".reseller-status").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const enabled = btn.dataset.enabled !== "1";
+        try { await resellerAdminRequest("/api/admin/resellers/status", {id, enabled}); toast(enabled ? "Revendedor ativado." : "Revendedor desativado."); await loadMasterResellers(); }
+        catch (e) { toast(e.message); }
+    });
+
+    document.querySelectorAll(".reseller-delete").forEach(btn => btn.onclick = async () => {
+        const id = Number(btn.dataset.id);
+        const current = findMasterReseller(id);
+        if (!confirm(`Excluir permanentemente o revendedor ${current?.username || ""}?`)) return;
+        try { await resellerAdminRequest("/api/admin/resellers/delete", {id}, "DELETE"); toast("Revendedor excluído."); await loadMasterResellers(); }
+        catch (e) { toast(e.message); }
+    });
+}
+
+document.getElementById("openResellerAdmin").addEventListener("click", async () => {
+    document.getElementById("resellerAdminOverlay").classList.add("show");
+    await loadMasterResellers();
+});
+document.getElementById("closeResellerAdmin").addEventListener("click", () => document.getElementById("resellerAdminOverlay").classList.remove("show"));
+document.getElementById("resellerAdminOverlay").addEventListener("click", e => { if (e.target.id === "resellerAdminOverlay") e.currentTarget.classList.remove("show"); });
+document.getElementById("refreshResellerAdmin").addEventListener("click", loadMasterResellers);
+document.getElementById("resellerAdminSearch").addEventListener("input", renderMasterResellers);
 
 /* REVENDEDOR - backend necessario. Token privado do Mercado Pago fica SOMENTE no servidor. */
 const R_TOKEN_KEY="external_ios_reseller_token";let rToken=localStorage.getItem(R_TOKEN_KEY)||"",rMe=null,rPoll=null;const rPrices={"1d":5.11,"7d":14.29,"30d":25.90};
