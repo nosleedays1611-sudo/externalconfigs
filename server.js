@@ -5214,6 +5214,12 @@ app.post(
     resellerAuthRequired,
     (req, res) => {
         try {
+            const prefix =
+                sanitizePrefix(
+                    req.body.prefix ||
+                    "EXTERNAL"
+                );
+
             const plan =
                 String(
                     req.body.plan ||
@@ -5282,7 +5288,7 @@ app.post(
                     do {
                         key =
                             generateKeyValue(
-                                "EXTERNAL"
+                                prefix
                             );
                     } while (
                         db.prepare(`
@@ -5312,7 +5318,7 @@ app.post(
                             )
                             VALUES (
                                 ?,
-                                'EXTERNAL',
+                                ?,
                                 'unused',
                                 NULL,
                                 ?,
@@ -5326,6 +5332,7 @@ app.post(
                             )
                         `).run(
                             key,
+                            prefix,
                             `PLAN:${planData.days}`
                         );
 
@@ -5381,6 +5388,7 @@ app.post(
                 success: true,
                 key:
                     result.key,
+                prefix,
                 plan,
                 days:
                     planData.days,
