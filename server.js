@@ -135,10 +135,6 @@ const RESELLER_PLANS = {
     "7d": {
         days: 7,
         priceCents: 1429
-    },
-    "30d": {
-        days: 30,
-        priceCents: 2590
     }
 };
 
@@ -177,6 +173,47 @@ function resellerPublic(row) {
     };
 }
 
+
+
+function initializeMissingResellerDeadlines() {
+    try {
+        const deadline =
+            new Date(
+                Date.now() +
+                RESELLER_FIRST_DEPOSIT_HOURS *
+                60 *
+                60 *
+                1000
+            ).toISOString();
+
+        const result =
+            db.prepare(`
+                UPDATE resellers
+                SET first_deposit_deadline_at = ?
+                WHERE first_deposit_deadline_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM reseller_deposits rd
+                      WHERE rd.reseller_id = resellers.id
+                        AND rd.credited = 1
+                  )
+            `).run(deadline);
+
+        if (result.changes > 0) {
+            console.log(
+                `[RESELLER] Prazo inicial de 48h aplicado a ${result.changes} conta(s) sem deposito confirmado.`
+            );
+        }
+
+    } catch (error) {
+        console.error(
+            "[RESELLER] Erro inicializando prazos de primeiro deposito:",
+            error
+        );
+    }
+}
+
+initializeMissingResellerDeadlines();
 
 function resellerHasApprovedDeposit(resellerId) {
     const row =
@@ -5124,6 +5161,19 @@ app.post(
                 `).get(
                     reseller.id
                 );
+
+            if (
+                fresh &&
+                fresh.first_deposit_deadline_at &&
+                resellerHasApprovedDeposit(fresh.id)
+            ) {
+                clearResellerFirstDepositDeadline(
+                    fresh.id
+                );
+
+                fresh.first_deposit_deadline_at =
+                    null;
+            }
 
             const session =
                 createResellerSession(
