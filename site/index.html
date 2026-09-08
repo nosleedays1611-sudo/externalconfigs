@@ -898,6 +898,38 @@ select:focus{
     letter-spacing:.7px;
 }
 
+
+.reseller-register-deadline{
+    display:none;
+    margin-top:13px;
+    padding:14px 15px;
+    border-radius:15px;
+    border:1px solid rgba(255,117,130,.23);
+    background:rgba(255,117,130,.055);
+    text-align:center;
+}
+.reseller-register-deadline.show{display:block}
+.reseller-register-deadline-title{
+    color:#ff9aa3;
+    font-size:10px;
+    font-weight:850;
+    letter-spacing:1px;
+}
+.reseller-register-deadline-text{
+    margin-top:7px;
+    color:#9fa5ae;
+    font-size:10px;
+    line-height:1.5;
+}
+.reseller-register-deadline-time{
+    margin-top:10px;
+    color:#fff;
+    font-family:"SFMono-Regular",Consolas,monospace;
+    font-size:21px;
+    font-weight:850;
+    letter-spacing:1px;
+}
+
 </style>
 </head>
 <body>
@@ -1114,7 +1146,13 @@ select:focus{
 </section>
 
 
-<div class="reseller-overlay" id="resellerAuthOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">&#193;REA DO REVENDEDOR</div><div class="user-badge">EXTERNAL IOS</div></div><button type="button" class="icon-btn" id="closeResellerAuth">&#215;</button></div><div class="reseller-tabs"><button type="button" class="reseller-tab active" data-r-tab="login">Entrar</button><button type="button" class="reseller-tab" data-r-tab="register">Criar conta</button></div><div class="reseller-auth-page active" id="rLogin"><div class="field"><label>USU&#193;RIO</label><input id="rLoginUser"></div><div class="field"><label>SENHA</label><input id="rLoginPass" type="password"></div><button class="btn" id="rLoginBtn">Entrar</button><div class="message" id="rLoginMsg"></div></div><div class="reseller-auth-page" id="rRegister"><div class="field"><label>USU&#193;RIO</label><input id="rRegUser"></div><div class="field"><label>E-MAIL</label><input id="rRegEmail" type="email"></div><div class="field"><label>SENHA</label><input id="rRegPass" type="password"></div><button class="btn btn-green" id="rRegBtn">Criar conta</button><div class="message" id="rRegMsg"></div></div></div></div>
+<div class="reseller-overlay" id="resellerAuthOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">&#193;REA DO REVENDEDOR</div><div class="user-badge">EXTERNAL IOS</div></div><button type="button" class="icon-btn" id="closeResellerAuth">&#215;</button></div><div class="reseller-tabs"><button type="button" class="reseller-tab active" data-r-tab="login">Entrar</button><button type="button" class="reseller-tab" data-r-tab="register">Criar conta</button></div><div class="reseller-auth-page active" id="rLogin"><div class="field"><label>USU&#193;RIO</label><input id="rLoginUser"></div><div class="field"><label>SENHA</label><input id="rLoginPass" type="password"></div><button class="btn" id="rLoginBtn">Entrar</button><div class="message" id="rLoginMsg"></div></div><div class="reseller-auth-page" id="rRegister"><div class="field"><label>USU&#193;RIO</label><input id="rRegUser"></div><div class="field"><label>E-MAIL</label><input id="rRegEmail" type="email"></div><div class="field"><label>SENHA</label><input id="rRegPass" type="password"></div><button class="btn btn-green" id="rRegBtn">Criar conta</button>
+<div class="message" id="rRegMsg"></div>
+<div class="reseller-register-deadline" id="rRegisterDeadlineBox">
+    <div class="reseller-register-deadline-title">CONTA CRIADA</div>
+    <div class="reseller-register-deadline-text">Faça seu primeiro depósito antes do prazo abaixo. Sem um depósito confirmado, sua conta será excluída automaticamente.</div>
+    <div class="reseller-register-deadline-time" id="rRegisterDeadlineTime">48:00:00</div>
+</div></div></div></div>
 <section id="resellerPanel"><div class="container"><div class="header"><div><div class="header-title">REVENDEDOR EXTERNAL IOS</div><div class="user-badge" id="rUser">-</div></div><div class="header-actions"><button class="icon-btn" id="rRefresh">&#8635;</button><button class="icon-btn" id="rLogout">&#215;</button></div></div>
 <div class="reseller-deadline-card" id="rDepositDeadlineCard">
 <div class="reseller-deadline-title">PRIMEIRO DEPÓSITO PENDENTE</div>
@@ -3287,7 +3325,7 @@ document.getElementById("refreshResellerAdmin").addEventListener("click", loadMa
 document.getElementById("resellerAdminSearch").addEventListener("input", renderMasterResellers);
 
 /* REVENDEDOR - backend necessario. Token privado do Mercado Pago fica SOMENTE no servidor. */
-const R_TOKEN_KEY="external_ios_reseller_token";let rToken=localStorage.getItem(R_TOKEN_KEY)||"",rMe=null,rPoll=null,rDeadlineTimer=null,rRegisterDeadlineTimer=null;const rPrices={"1d":5.11,"7d":14.29,"30d":25.90};
+const R_TOKEN_KEY="external_ios_reseller_token";let rToken=localStorage.getItem(R_TOKEN_KEY)||"",rMe=null,rPoll=null,rDeadlineTimer=null,rRegisterDeadlineTimer=null;const rPrices={"1d":5.11,"7d":14.29};
 async function rReq(ep,opt={},auth=true){const h={"Content-Type":"application/json",...(opt.headers||{})};if(auth&&rToken)h.Authorization="Bearer "+rToken;const response=await fetch(API+ep,{...opt,headers:h,cache:"no-store"});const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{data={success:false,message:raw||"Resposta invalida"}}return{response,data}}
 function rMoney(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}function rBalance(v){document.getElementById("rBalance").textContent=rMoney(v)}
 
@@ -3361,25 +3399,29 @@ function rStartRegisterDeadline(deadlineAt){
     }
 
     const m=document.getElementById("rRegMsg");
+    const box=document.getElementById("rRegisterDeadlineBox");
+    const time=document.getElementById("rRegisterDeadlineTime");
     const deadline=new Date(deadlineAt).getTime();
+
+    m.textContent="Conta criada com sucesso.";
+    m.className="message success";
+    box.classList.add("show");
 
     function update(){
         const remaining=deadline-Date.now();
 
         if(remaining<=0){
-            m.textContent="Prazo expirado. A conta será excluída automaticamente.";
+            time.textContent="00:00:00";
+
             if(rRegisterDeadlineTimer){
                 clearInterval(rRegisterDeadlineTimer);
                 rRegisterDeadlineTimer=null;
             }
+
             return;
         }
 
-        m.textContent=
-            "Conta criada. Faça o primeiro depósito em "+
-            rFormatDeadline(remaining)+
-            " ou a conta será excluída.";
-        m.className="message success";
+        time.textContent=rFormatDeadline(remaining);
     }
 
     update();
