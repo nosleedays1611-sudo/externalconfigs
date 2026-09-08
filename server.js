@@ -101,9 +101,30 @@ function ensureResellerTables() {
     `);
 }
 
+
 ensureResellerTables();
 
+function ensureResellerDeadlineColumn() {
+    try {
+        db.prepare(
+            "ALTER TABLE resellers ADD COLUMN first_deposit_deadline_at TEXT"
+        ).run();
+    } catch (error) {
+        if (
+            !String(error?.message || "")
+                .toLowerCase()
+                .includes("duplicate column")
+        ) {
+            throw error;
+        }
+    }
+}
+
+ensureResellerDeadlineColumn();
+
+
 const RESELLER_SESSION_HOURS = 168;
+const RESELLER_FIRST_DEPOSIT_HOURS = 48;
 const RESELLER_MIN_DEPOSIT_CENTS = 2500;
 
 const RESELLER_PLANS = {
@@ -122,6 +143,15 @@ const RESELLER_PLANS = {
 };
 
 function resellerPublic(row) {
+    const deadlineAt =
+        row.first_deposit_deadline_at ||
+        null;
+
+    const deadlineMs =
+        deadlineAt
+            ? new Date(deadlineAt).getTime()
+            : null;
+
     return {
         id: row.id,
         username: row.username,
@@ -129,9 +159,118 @@ function resellerPublic(row) {
         enabled: Boolean(row.enabled),
         balance: Number(row.balance_cents || 0) / 100,
         created_at: row.created_at,
-        last_login_at: row.last_login_at
+        last_login_at: row.last_login_at,
+
+        first_deposit_required:
+            Boolean(deadlineAt),
+
+        first_deposit_deadline_at:
+            deadlineAt,
+
+        first_deposit_remaining_ms:
+            deadlineMs
+                ? Math.max(
+                    0,
+                    deadlineMs - Date.now()
+                )
+                : 0
     };
 }
+
+
+function resellerHasApprovedDeposit(resellerId) {
+    const row =
+        db.prepare(`
+            SELECT id
+            FROM reseller_deposits
+            WHERE reseller_id = ?
+              AND credited = 1
+            LIMIT 1
+        `).get(resellerId);
+
+    return Boolean(row);
+}
+
+function clearResellerFirstDepositDeadline(resellerId) {
+    db.prepare(`
+        UPDATE resellers
+        SET first_deposit_deadline_at = NULL
+        WHERE id = ?
+    `).run(resellerId);
+}
+
+function cleanupExpiredResellers() {
+    try {
+        const now =
+            new Date().toISOString();
+
+        const expired =
+            db.prepare(`
+                SELECT
+                    r.id,
+                    r.username
+                FROM resellers r
+                WHERE r.first_deposit_deadline_at IS NOT NULL
+                  AND r.first_deposit_deadline_at <= ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM reseller_deposits rd
+                      WHERE rd.reseller_id = r.id
+                        AND rd.credited = 1
+                  )
+            `).all(now);
+
+        if (!expired.length) {
+            return 0;
+        }
+
+        const remove =
+            db.transaction(rows => {
+                for (const reseller of rows) {
+                    db.prepare(`
+                        DELETE FROM reseller_sessions
+                        WHERE reseller_id = ?
+                    `).run(reseller.id);
+
+                    db.prepare(`
+                        DELETE FROM reseller_deposits
+                        WHERE reseller_id = ?
+                    `).run(reseller.id);
+
+                    db.prepare(`
+                        DELETE FROM reseller_keys
+                        WHERE reseller_id = ?
+                    `).run(reseller.id);
+
+                    db.prepare(`
+                        DELETE FROM resellers
+                        WHERE id = ?
+                    `).run(reseller.id);
+
+                    console.log(
+                        `[RESELLER] Conta "${reseller.username}" excluida por nao realizar o primeiro deposito em 48 horas.`
+                    );
+                }
+            });
+
+        remove(expired);
+        return expired.length;
+
+    } catch (error) {
+        console.error(
+            "[RESELLER] Erro limpando contas sem primeiro deposito:",
+            error
+        );
+        return 0;
+    }
+}
+
+cleanupExpiredResellers();
+
+setInterval(
+    cleanupExpiredResellers,
+    60 * 1000
+).unref();
 
 function createResellerSession(resellerId) {
     const token =
@@ -167,6 +306,7 @@ function createResellerSession(resellerId) {
 
 function resellerAuthRequired(req, res, next) {
     try {
+        cleanupExpiredResellers();
         const token = getBearerToken(req);
 
         if (!token) {
@@ -404,6 +544,10 @@ function creditApprovedDeposit(
                     nowISO(),
                     fresh.id
                 );
+
+                clearResellerFirstDepositDeadline(
+                    fresh.reseller_id
+                );
             } else {
                 db.prepare(`
                     UPDATE reseller_deposits
@@ -411,6 +555,10 @@ function creditApprovedDeposit(
                     WHERE id = ?
                 `).run(
                     fresh.id
+                );
+
+                clearResellerFirstDepositDeadline(
+                    fresh.reseller_id
                 );
             }
 
@@ -4795,6 +4943,15 @@ app.post(
                     ""
                 );
 
+            const firstDepositDeadlineAt =
+                new Date(
+                    Date.now() +
+                    RESELLER_FIRST_DEPOSIT_HOURS *
+                    60 *
+                    60 *
+                    1000
+                ).toISOString();
+
             if (
                 !/^[a-z0-9_.-]{3,32}$/
                     .test(username)
@@ -4859,24 +5016,27 @@ app.post(
                         password_hash,
                         password_salt,
                         enabled,
-                        balance_cents
+                        balance_cents,
+                        first_deposit_deadline_at
                     )
                     VALUES (
                         ?, ?, ?, ?,
                         1,
-                        0
+                        0,
+                        ?
                     )
                 `).run(
                     username,
                     email,
                     hash,
-                    salt
+                    salt,
+                    firstDepositDeadlineAt
                 );
 
             return res.status(201).json({
                 success: true,
                 message:
-                    "Conta de revendedor criada",
+                    "Conta de revendedor criada. Realize o primeiro deposito em ate 48 horas para evitar a exclusao da conta.",
                 user: resellerPublic(
                     db.prepare(`
                         SELECT *
@@ -4907,6 +5067,7 @@ app.post(
     "/api/reseller/auth/login",
     (req, res) => {
         try {
+            cleanupExpiredResellers();
             const username =
                 normalizeUsername(
                     req.body.username
@@ -5027,6 +5188,19 @@ app.get(
             `).get(
                 req.reseller.id
             );
+
+        if (
+            reseller &&
+            reseller.first_deposit_deadline_at &&
+            resellerHasApprovedDeposit(reseller.id)
+        ) {
+            clearResellerFirstDepositDeadline(
+                reseller.id
+            );
+
+            reseller.first_deposit_deadline_at =
+                null;
+        }
 
         return res.json({
             success: true,
@@ -5225,6 +5399,13 @@ app.post(
                     req.body.plan ||
                     ""
                 );
+
+            if (!["1d", "7d"].includes(plan)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Plano invalido"
+                });
+            }
 
             const planData =
                 RESELLER_PLANS[
