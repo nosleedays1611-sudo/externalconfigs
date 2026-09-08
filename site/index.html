@@ -864,6 +864,40 @@ select:focus{
 .reseller-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.reseller-modal-title{font-size:13px;font-weight:800;letter-spacing:1.3px}.reseller-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}.reseller-tab{padding:11px;border-radius:13px;border:1px solid rgba(255,255,255,.09);color:#8d939c;background:rgba(255,255,255,.025);font-weight:750}.reseller-tab.active{color:#fff;background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.045));border-color:rgba(255,255,255,.14)}.reseller-auth-page{display:none}.reseller-auth-page.active{display:block}
 #resellerPanel{display:none;min-height:100vh;padding:28px 15px 56px}.reseller-balance{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}.reseller-balance-value{font-size:30px;font-weight:800}.reseller-balance-label{color:#7f858e;font-size:10px;letter-spacing:1.1px;margin-bottom:5px}.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.price-box{padding:14px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);text-align:center}.price-box b{display:block;font-size:13px;margin-bottom:5px}.price-box span{font-size:11px;color:#7f858d}.pix-box{display:none;margin-top:14px;padding:16px;border-radius:18px;border:1px solid rgba(109,255,178,.15);background:rgba(109,255,178,.035)}.pix-box.show{display:block}.pix-qr{display:block;width:210px;max-width:100%;margin:0 auto 14px;border-radius:16px;background:#fff;padding:8px}.pix-copy{width:100%;min-height:84px;resize:none;color:#fff;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09);border-radius:13px;padding:12px;font-family:monospace;font-size:11px}.reseller-history-item{padding:12px 0;border-bottom:1px solid rgba(255,255,255,.055)}.reseller-history-key{color:var(--green);font-family:monospace;font-size:12px;word-break:break-all}.reseller-history-meta{margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;color:#747a82;font-size:10px}@media(max-width:600px){.price-grid{grid-template-columns:1fr}}
 
+
+.reseller-deadline-card{
+    display:none;
+    margin-bottom:14px;
+    padding:15px 16px;
+    border-radius:16px;
+    border:1px solid rgba(255,117,130,.18);
+    background:
+        linear-gradient(180deg,rgba(255,117,130,.075),rgba(255,117,130,.018)),
+        rgba(255,255,255,.018);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+}
+.reseller-deadline-card.show{display:block}
+.reseller-deadline-title{
+    color:#ff9aa3;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:1px;
+    margin-bottom:7px;
+}
+.reseller-deadline-text{
+    color:#a8adb5;
+    font-size:10px;
+    line-height:1.5;
+}
+.reseller-deadline-time{
+    margin-top:10px;
+    color:#fff;
+    font-family:"SFMono-Regular",Consolas,monospace;
+    font-size:18px;
+    font-weight:800;
+    letter-spacing:.7px;
+}
+
 </style>
 </head>
 <body>
@@ -1082,8 +1116,13 @@ select:focus{
 
 <div class="reseller-overlay" id="resellerAuthOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">&#193;REA DO REVENDEDOR</div><div class="user-badge">EXTERNAL IOS</div></div><button type="button" class="icon-btn" id="closeResellerAuth">&#215;</button></div><div class="reseller-tabs"><button type="button" class="reseller-tab active" data-r-tab="login">Entrar</button><button type="button" class="reseller-tab" data-r-tab="register">Criar conta</button></div><div class="reseller-auth-page active" id="rLogin"><div class="field"><label>USU&#193;RIO</label><input id="rLoginUser"></div><div class="field"><label>SENHA</label><input id="rLoginPass" type="password"></div><button class="btn" id="rLoginBtn">Entrar</button><div class="message" id="rLoginMsg"></div></div><div class="reseller-auth-page" id="rRegister"><div class="field"><label>USU&#193;RIO</label><input id="rRegUser"></div><div class="field"><label>E-MAIL</label><input id="rRegEmail" type="email"></div><div class="field"><label>SENHA</label><input id="rRegPass" type="password"></div><button class="btn btn-green" id="rRegBtn">Criar conta</button><div class="message" id="rRegMsg"></div></div></div></div>
 <section id="resellerPanel"><div class="container"><div class="header"><div><div class="header-title">REVENDEDOR EXTERNAL IOS</div><div class="user-badge" id="rUser">-</div></div><div class="header-actions"><button class="icon-btn" id="rRefresh">&#8635;</button><button class="icon-btn" id="rLogout">&#215;</button></div></div>
+<div class="reseller-deadline-card" id="rDepositDeadlineCard">
+<div class="reseller-deadline-title">PRIMEIRO DEPÓSITO PENDENTE</div>
+<div class="reseller-deadline-text">Realize seu primeiro depósito antes do prazo. Se nenhum depósito for confirmado em 48 horas após a criação da conta, ela será excluída automaticamente.</div>
+<div class="reseller-deadline-time" id="rDepositDeadlineTime">48:00:00</div>
+</div>
 <div class="panel-card"><div class="title">SALDO</div><div class="reseller-balance"><div><div class="reseller-balance-label">SALDO DISPONIVEL</div><div class="reseller-balance-value" id="rBalance">R$ 0,00</div></div><button class="btn btn-green" id="rDeposit" style="width:auto">Depositar</button></div></div>
-<div class="panel-card"><div class="title">VALORES DAS KEYS</div><div class="price-grid"><div class="price-box"><b>1 DIA</b><span>R$ 5,11</span></div><div class="price-box"><b>7 DIAS</b><span>R$ 14,29</span></div><div class="price-box"><b>30 DIAS</b><span>R$ 25,90</span></div></div></div>
+<div class="panel-card"><div class="title">VALORES DAS KEYS</div><div class="price-grid"><div class="price-box"><b>1 DIA</b><span>R$ 5,11</span></div><div class="price-box"><b>7 DIAS</b><span>R$ 14,29</span></div></div></div>
 <div class="panel-card"><div class="title">GERAR KEY</div><div class="field"><label>PREFIXO</label><input id="rPrefix" value="EXTERNAL" maxlength="24" autocomplete="off"></div><div class="field"><label>DURA&#199;&#195;O</label><select id="rPlan"><option value="1d">1 Dia - R$ 5,11</option><option value="7d">7 Dias - R$ 14,29</option></select></div><button class="btn" id="rGenerate">Gerar Key</button><div class="key-result" id="rGenResult"><div class="generated-key" id="rGenKey">-</div><div class="copy-row"><button class="btn" id="rCopyKey">Copiar</button><button class="btn" id="rCheckGen">Consultar</button></div></div></div>
 <div class="panel-card"><div class="title">CHECK KEY</div><div class="field"><label>KEY</label><input id="rCheckInput" placeholder="EXTERNAL-IOS-XXXXX"></div><button class="btn" id="rCheckBtn">Consultar</button><div id="rCheckResult" style="display:none;margin-top:15px"><div class="info"><span>Status</span><span id="rCheckStatus">-</span></div><div class="info"><span>Plano</span><span id="rCheckPlan">-</span></div><div class="info"><span>Criada em</span><span id="rCheckCreated">-</span></div><div class="info"><span>Ativada em</span><span id="rCheckActivated">Nunca</span></div><div class="info"><span>Expira em</span><span id="rCheckExpires">Nunca</span></div><div class="info"><span>Dispositivo</span><span id="rCheckDevice">N&#227;o vinculado</span></div></div></div>
 <div class="panel-card"><div class="title">HIST&#211;RICO DE KEYS</div><button class="btn" id="rHistoryRefresh">Atualizar historico</button><div id="rHistory" style="margin-top:15px"></div></div></div></section>
@@ -3248,11 +3287,116 @@ document.getElementById("refreshResellerAdmin").addEventListener("click", loadMa
 document.getElementById("resellerAdminSearch").addEventListener("input", renderMasterResellers);
 
 /* REVENDEDOR - backend necessario. Token privado do Mercado Pago fica SOMENTE no servidor. */
-const R_TOKEN_KEY="external_ios_reseller_token";let rToken=localStorage.getItem(R_TOKEN_KEY)||"",rMe=null,rPoll=null;const rPrices={"1d":5.11,"7d":14.29,"30d":25.90};
+const R_TOKEN_KEY="external_ios_reseller_token";let rToken=localStorage.getItem(R_TOKEN_KEY)||"",rMe=null,rPoll=null,rDeadlineTimer=null,rRegisterDeadlineTimer=null;const rPrices={"1d":5.11,"7d":14.29,"30d":25.90};
 async function rReq(ep,opt={},auth=true){const h={"Content-Type":"application/json",...(opt.headers||{})};if(auth&&rToken)h.Authorization="Bearer "+rToken;const response=await fetch(API+ep,{...opt,headers:h,cache:"no-store"});const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{data={success:false,message:raw||"Resposta invalida"}}return{response,data}}
 function rMoney(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}function rBalance(v){document.getElementById("rBalance").textContent=rMoney(v)}
-function rShow(u){rMe=u;document.getElementById("auth").style.display="none";document.getElementById("panel").style.display="none";document.getElementById("resellerPanel").style.display="block";document.getElementById("rUser").textContent=u.username||"REVENDEDOR";rBalance(u.balance);document.getElementById("resellerAuthOverlay").classList.remove("show")}
-function rLogoutLocal(){rToken="";rMe=null;localStorage.removeItem(R_TOKEN_KEY);if(rPoll){clearInterval(rPoll);rPoll=null}document.getElementById("resellerPanel").style.display="none";showLogin()}
+
+function rFormatDeadline(ms){
+    let total=Math.max(0,Math.floor(Number(ms||0)/1000));
+    const hours=Math.floor(total/3600);
+    total%=3600;
+    const minutes=Math.floor(total/60);
+    const seconds=total%60;
+    return String(hours).padStart(2,"0")+":"+
+           String(minutes).padStart(2,"0")+":"+
+           String(seconds).padStart(2,"0");
+}
+
+function rStopDeadlineTimer(){
+    if(rDeadlineTimer){
+        clearInterval(rDeadlineTimer);
+        rDeadlineTimer=null;
+    }
+}
+
+function rRenderDepositDeadline(user){
+    const card=document.getElementById("rDepositDeadlineCard");
+    const time=document.getElementById("rDepositDeadlineTime");
+
+    rStopDeadlineTimer();
+
+    if(
+        !user ||
+        !user.first_deposit_required ||
+        !user.first_deposit_deadline_at
+    ){
+        card.classList.remove("show");
+        return;
+    }
+
+    const deadline=new Date(user.first_deposit_deadline_at).getTime();
+
+    function update(){
+        const remaining=deadline-Date.now();
+
+        if(remaining<=0){
+            time.textContent="00:00:00";
+            card.classList.add("show");
+            rStopDeadlineTimer();
+
+            setTimeout(async()=>{
+                try{
+                    await rRefreshMe();
+                }catch{
+                    rLogoutLocal();
+                    toast("Prazo de 48 horas expirado. Conta excluída.");
+                }
+            },1200);
+
+            return;
+        }
+
+        time.textContent=rFormatDeadline(remaining);
+        card.classList.add("show");
+    }
+
+    update();
+    rDeadlineTimer=setInterval(update,1000);
+}
+
+function rStartRegisterDeadline(deadlineAt){
+    if(rRegisterDeadlineTimer){
+        clearInterval(rRegisterDeadlineTimer);
+        rRegisterDeadlineTimer=null;
+    }
+
+    const m=document.getElementById("rRegMsg");
+    const deadline=new Date(deadlineAt).getTime();
+
+    function update(){
+        const remaining=deadline-Date.now();
+
+        if(remaining<=0){
+            m.textContent="Prazo expirado. A conta será excluída automaticamente.";
+            if(rRegisterDeadlineTimer){
+                clearInterval(rRegisterDeadlineTimer);
+                rRegisterDeadlineTimer=null;
+            }
+            return;
+        }
+
+        m.textContent=
+            "Conta criada. Faça o primeiro depósito em "+
+            rFormatDeadline(remaining)+
+            " ou a conta será excluída.";
+        m.className="message success";
+    }
+
+    update();
+    rRegisterDeadlineTimer=setInterval(update,1000);
+}
+
+function rShow(u){
+    rMe=u;
+    document.getElementById("auth").style.display="none";
+    document.getElementById("panel").style.display="none";
+    document.getElementById("resellerPanel").style.display="block";
+    document.getElementById("rUser").textContent=u.username||"REVENDEDOR";
+    rBalance(u.balance);
+    rRenderDepositDeadline(u);
+    document.getElementById("resellerAuthOverlay").classList.remove("show");
+}
+function rLogoutLocal(){rToken="";rMe=null;localStorage.removeItem(R_TOKEN_KEY);if(rPoll){clearInterval(rPoll);rPoll=null}rStopDeadlineTimer();document.getElementById("resellerPanel").style.display="none";showLogin()}
 async function rRefreshMe(){const{x:_,response,data}=await rReq("/api/reseller/me");if(!response.ok||!data.success)throw Error(data.message||"Falha ao atualizar");rShow(data.user);return data.user}
 async function rHistory(){const c=document.getElementById("rHistory");c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Carregando...</div>';try{const{response,data}=await rReq("/api/reseller/keys");if(!response.ok||!data.success)throw Error(data.message||"Erro no historico");if(!data.keys?.length){c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Nenhuma key gerada.</div>';return}c.innerHTML=data.keys.map(k=>`<div class="reseller-history-item"><div class="reseller-history-key">${escapeHtml(k.key)}</div><div class="reseller-history-meta"><span>${escapeHtml(statusText(k.status))}</span><span>${escapeHtml(String(k.days||"-"))} ${Number(k.days)===1?"dia":"dias"}</span><span>${escapeHtml(rMoney(k.price||0))}</span><span>${escapeHtml(formatDate(k.created_at))}</span></div></div>`).join("")}catch(e){c.innerHTML='<div style="color:var(--red);text-align:center;padding:10px">'+escapeHtml(e.message)+'</div>'}}
 async function rCheck(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Digite uma key.");try{const{response,data}=await rReq("/api/reseller/keys/check",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao consultar");if(!data.found)return toast("Key nao encontrada.");document.getElementById("rCheckStatus").textContent=statusText(data.status);document.getElementById("rCheckPlan").textContent=data.days?data.days+" dias":"-";document.getElementById("rCheckCreated").textContent=formatDate(data.created_at);document.getElementById("rCheckActivated").textContent=formatDate(data.activated_at);document.getElementById("rCheckExpires").textContent=formatDate(data.expires_at);document.getElementById("rCheckDevice").textContent=data.device_bound?"Vinculado":"N\u00E3o vinculado";document.getElementById("rCheckResult").style.display="block"}catch(e){toast(e.message)}}
@@ -3355,7 +3499,7 @@ async function rCreatePix(){
 }
 document.getElementById("openResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.add("show");document.getElementById("closeResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.remove("show");document.querySelectorAll("[data-r-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-r-tab]").forEach(x=>x.classList.toggle("active",x===b));document.getElementById("rLogin").classList.toggle("active",b.dataset.rTab==="login");document.getElementById("rRegister").classList.toggle("active",b.dataset.rTab==="register")});
 document.getElementById("rLoginBtn").onclick=async()=>{const m=document.getElementById("rLoginMsg");try{const{response,data}=await rReq("/api/reseller/auth/login",{method:"POST",body:JSON.stringify({username:document.getElementById("rLoginUser").value.trim(),password:document.getElementById("rLoginPass").value})},false);if(!response.ok||!data.success||!data.token)throw Error(data.message||"Usu\u00E1rio ou senha inv\u00E1lidos");rToken=data.token;localStorage.setItem(R_TOKEN_KEY,rToken);rShow(data.user);await rHistory()}catch(e){m.textContent=e.message;m.className="message error"}};
-document.getElementById("rRegBtn").onclick=async()=>{const m=document.getElementById("rRegMsg");try{const{response,data}=await rReq("/api/reseller/auth/register",{method:"POST",body:JSON.stringify({username:document.getElementById("rRegUser").value.trim(),email:document.getElementById("rRegEmail").value.trim(),password:document.getElementById("rRegPass").value})},false);if(!response.ok||!data.success)throw Error(data.message||"Erro ao criar conta");m.textContent="Conta criada. Agora fa\u00E7a login.";m.className="message success"}catch(e){m.textContent=e.message;m.className="message error"}};
+document.getElementById("rRegBtn").onclick=async()=>{const m=document.getElementById("rRegMsg");try{const{response,data}=await rReq("/api/reseller/auth/register",{method:"POST",body:JSON.stringify({username:document.getElementById("rRegUser").value.trim(),email:document.getElementById("rRegEmail").value.trim(),password:document.getElementById("rRegPass").value})},false);if(!response.ok||!data.success)throw Error(data.message||"Erro ao criar conta");if(data.user?.first_deposit_deadline_at){rStartRegisterDeadline(data.user.first_deposit_deadline_at)}else{m.textContent="Conta criada. Agora fa\u00E7a login.";m.className="message success"}}catch(e){m.textContent=e.message;m.className="message error"}};
 document.getElementById("rLogout").onclick=rLogoutLocal;document.getElementById("rRefresh").onclick=async()=>{try{await rRefreshMe();await rHistory()}catch(e){toast(e.message)}};document.getElementById("rHistoryRefresh").onclick=rHistory;document.getElementById("rGenerate").onclick=rGenerate;document.getElementById("rCheckBtn").onclick=rCheck;document.getElementById("rCheckGen").onclick=rCheck;document.getElementById("rCopyKey").onclick=async()=>{const v=document.getElementById("rGenKey").textContent.trim();if(v&&v!=="-")await navigator.clipboard.writeText(v)};document.getElementById("rDeposit").onclick=()=>{
 document.getElementById("rDepositError").style.display="none";
 document.getElementById("rPixBox").classList.remove("show");
