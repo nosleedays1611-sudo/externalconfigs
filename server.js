@@ -2575,6 +2575,24 @@ app.post("/api/keys/check", (req, res) => {
         const status =
             checkKeyExpiration(keyData);
 
+        /*
+         * RECUPERACAO APOS REINSTALACAO:
+         *
+         * O device_token e apenas o atalho local para evitar refazer o
+         * perfil UDID em todo acesso. Depois de uma reinstalacao, esse
+         * token pode nao estar mais disponivel para o app. Isso NAO prova
+         * que seja outro iPhone.
+         *
+         * Quando a key esta ativa/vinculada mas o token nao bate, nao
+         * retornamos DEVICE_MISMATCH aqui. Informamos device_bound:false
+         * somente para o cliente ExternalAuth, sem alterar o banco. A dylib
+         * atual ja usa device_bound:false para abrir o fluxo "Obter UDID".
+         *
+         * A prova definitiva continua no callback do perfil: 
+         * activateKeyAfterDeviceEnrollment() compara o UDID real obtido com
+         * keys.device_udid. Mesmo UDID => emite novo device_token. UDID
+         * diferente => DEVICE_MISMATCH e bloqueia.
+         */
         if (
             isExternalAuthRequest &&
             status === "active" &&
@@ -2585,12 +2603,27 @@ app.post("/api/keys/check", (req, res) => {
                 deviceToken
             )
         ) {
-            return res.status(403).json({
-                success: false,
+            return res.json({
+                success: true,
                 found: true,
-                code: "DEVICE_MISMATCH",
-                message:
-                    "Essa key ja foi usada em outro dispositivo."
+
+                key: keyData.key,
+                prefix: keyData.prefix,
+                status,
+                days: getDaysFromKey(keyData),
+
+                created_at: keyData.created_at,
+                activated_at: keyData.activated_at,
+                expires_at: keyData.expires_at,
+                paused_at: keyData.paused_at,
+                remaining_ms: keyData.remaining_ms,
+
+                // Apenas instrui a dylib a refazer a verificacao UDID.
+                // O vinculo real no banco NAO e removido.
+                device_bound: false,
+                device_bound_at: keyData.device_bound_at,
+                device_reverify_required: true,
+                device_proof_required: true
             });
         }
 
@@ -5428,6 +5461,109 @@ app.post(
                 success: false,
                 message:
                     "Erro interno ao consultar key"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   REVENDEDOR - RESETAR UDID DA PROPRIA KEY
+   Preserva status, ativacao, expiracao e tempo restante.
+========================================================= */
+
+app.post(
+    "/api/reseller/keys/device/reset",
+    resellerAuthRequired,
+    (req, res) => {
+        try {
+            const key =
+                String(
+                    req.body.key ||
+                    ""
+                ).trim();
+
+            if (!key) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key nao informada"
+                });
+            }
+
+            /*
+             * O JOIN garante que o revendedor so consiga
+             * resetar keys que foram geradas pela propria conta.
+             */
+            const keyData =
+                db.prepare(`
+                    SELECT keys.*
+                    FROM reseller_keys
+                    JOIN keys
+                        ON keys.id = reseller_keys.key_id
+                    WHERE reseller_keys.reseller_id = ?
+                      AND keys.key = ?
+                    LIMIT 1
+                `).get(
+                    req.reseller.id,
+                    key
+                );
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Key nao encontrada ou nao pertence a esta conta"
+                });
+            }
+
+            const resetAt = nowISO();
+
+            db.transaction(() => {
+                db.prepare(`
+                    UPDATE keys
+                    SET
+                        device_udid = NULL,
+                        device_bound_at = NULL,
+                        device_token_hash = NULL,
+                        device_reset_at = ?
+                    WHERE id = ?
+                `).run(
+                    resetAt,
+                    keyData.id
+                );
+
+                db.prepare(`
+                    DELETE FROM device_enrollments
+                    WHERE key_id = ?
+                `).run(
+                    keyData.id
+                );
+            })();
+
+            const fresh = getKey(keyData.key);
+            const status = checkKeyExpiration(fresh);
+
+            return res.json({
+                success: true,
+                message: "UDID resetado com sucesso",
+                key: fresh.key,
+                status,
+                days: getDaysFromKey(fresh),
+                activated_at: fresh.activated_at,
+                expires_at: fresh.expires_at,
+                paused_at: fresh.paused_at,
+                remaining_ms: fresh.remaining_ms,
+                device_bound: false,
+                device_reset_at: resetAt
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro ao resetar UDID do revendedor:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao resetar UDID"
             });
         }
     }
