@@ -30,6 +30,88 @@ function ensureDeviceTokenColumns() {
 
 ensureDeviceTokenColumns();
 
+/* =========================================================
+   EXTERNAL AUTH V6 - SESSOES CRIPTOGRAFICAS
+   A chave privada fica somente no iPhone. O servidor guarda
+   apenas a chave publica vinculada a key/HWID.
+========================================================= */
+
+function ensureExternalAuthV6SecuritySchema() {
+    const alterStatements = [
+        "ALTER TABLE keys ADD COLUMN hwid_public_key_b64 TEXT",
+        "ALTER TABLE keys ADD COLUMN hwid_public_key_hash TEXT"
+    ];
+
+    for (const sql of alterStatements) {
+        try {
+            db.prepare(sql).run();
+        } catch (error) {
+            if (
+                !String(error?.message || "")
+                    .toLowerCase()
+                    .includes("duplicate column")
+            ) {
+                throw error;
+            }
+        }
+    }
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS external_auth_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            challenge_id TEXT UNIQUE NOT NULL,
+            key_id INTEGER NOT NULL,
+            hwid TEXT NOT NULL,
+            public_key_b64 TEXT NOT NULL,
+            public_key_hash TEXT NOT NULL,
+            nonce TEXT NOT NULL,
+            message_to_sign TEXT NOT NULL,
+            build_marker TEXT NOT NULL,
+            app_build TEXT,
+            app_version TEXT,
+            dylib_hash TEXT,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            FOREIGN KEY (key_id)
+                REFERENCES keys(id)
+                ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS external_auth_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT UNIQUE NOT NULL,
+            key_id INTEGER NOT NULL,
+            hwid TEXT NOT NULL,
+            public_key_hash TEXT NOT NULL,
+            heartbeat_nonce TEXT NOT NULL,
+            build_marker TEXT NOT NULL,
+            dylib_hash TEXT,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (key_id)
+                REFERENCES keys(id)
+                ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_external_auth_challenge_id
+            ON external_auth_challenges(challenge_id);
+
+        CREATE INDEX IF NOT EXISTS idx_external_auth_challenge_key
+            ON external_auth_challenges(key_id);
+
+        CREATE INDEX IF NOT EXISTS idx_external_auth_session_token
+            ON external_auth_sessions(token_hash);
+
+        CREATE INDEX IF NOT EXISTS idx_external_auth_session_key
+            ON external_auth_sessions(key_id);
+    `);
+}
+
+ensureExternalAuthV6SecuritySchema();
+
 
 /* =========================================================
    REVENDEDORES / SALDO / PIX
@@ -1096,6 +1178,430 @@ function hashToken(token) {
         .digest("hex");
 }
 
+
+const EXTERNAL_AUTH_V6_BUILD_MARKER =
+    "EA-HWID-V6-SERVER-LOCKED";
+
+const EXTERNAL_AUTH_V6_CHALLENGE_SECONDS = 60;
+const EXTERNAL_AUTH_V6_SESSION_SECONDS = 300;
+const EXTERNAL_AUTH_V6_HEARTBEAT_SECONDS = 15;
+
+function normalizeSHA256(value) {
+    return String(value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-F0-9]/g, "");
+}
+
+function getExternalAuthReleaseState() {
+    const expectedHash = normalizeSHA256(
+        db.getSystemSetting(
+            "external_auth_v6_dylib_sha256",
+            ""
+        )
+    );
+
+    const hashEnforced =
+        String(
+            db.getSystemSetting(
+                "external_auth_v6_hash_enforced",
+                expectedHash ? "1" : "0"
+            )
+        ) === "1";
+
+    return {
+        build_marker: EXTERNAL_AUTH_V6_BUILD_MARKER,
+        dylib_sha256: expectedHash || null,
+        hash_enforced: hashEnforced
+    };
+}
+
+function validateExternalAuthRelease(
+    buildMarker,
+    dylibHash
+) {
+    if (
+        String(buildMarker || "") !==
+        EXTERNAL_AUTH_V6_BUILD_MARKER
+    ) {
+        return {
+            ok: false,
+            code: "BUILD_BLOCKED",
+            message:
+                "Versão da autenticação não autorizada."
+        };
+    }
+
+    const release =
+        getExternalAuthReleaseState();
+
+    if (release.hash_enforced) {
+        if (!release.dylib_sha256) {
+            return {
+                ok: false,
+                code: "RELEASE_NOT_CONFIGURED",
+                message:
+                    "Release da autenticação ainda não foi configurada."
+            };
+        }
+
+        if (
+            normalizeSHA256(dylibHash) !==
+            release.dylib_sha256
+        ) {
+            return {
+                ok: false,
+                code: "INTEGRITY_FAILED",
+                message:
+                    "Integridade da autenticação inválida."
+            };
+        }
+    }
+
+    return {
+        ok: true,
+        release
+    };
+}
+
+function externalAuthPublicKeyHash(
+    publicKeyB64
+) {
+    let raw;
+
+    try {
+        raw =
+            Buffer.from(
+                String(publicKeyB64 || ""),
+                "base64"
+            );
+    } catch {
+        return null;
+    }
+
+    if (
+        raw.length !== 65 ||
+        raw[0] !== 0x04
+    ) {
+        return null;
+    }
+
+    return crypto
+        .createHash("sha256")
+        .update(raw)
+        .digest("hex");
+}
+
+function externalAuthP256PublicKey(
+    publicKeyB64
+) {
+    const raw =
+        Buffer.from(
+            String(publicKeyB64 || ""),
+            "base64"
+        );
+
+    if (
+        raw.length !== 65 ||
+        raw[0] !== 0x04
+    ) {
+        throw new Error(
+            "Chave pública P-256 inválida"
+        );
+    }
+
+    // SubjectPublicKeyInfo prefix:
+    // id-ecPublicKey + prime256v1 + BIT STRING 65 bytes.
+    const spkiPrefix =
+        Buffer.from(
+            "3059301306072A8648CE3D020106082A8648CE3D030107034200",
+            "hex"
+        );
+
+    return crypto.createPublicKey({
+        key:
+            Buffer.concat([
+                spkiPrefix,
+                raw
+            ]),
+        format: "der",
+        type: "spki"
+    });
+}
+
+function verifyExternalAuthSignature(
+    publicKeyB64,
+    message,
+    signatureB64
+) {
+    try {
+        const publicKey =
+            externalAuthP256PublicKey(
+                publicKeyB64
+            );
+
+        const signature =
+            Buffer.from(
+                String(signatureB64 || ""),
+                "base64"
+            );
+
+        if (
+            !signature.length ||
+            signature.length > 256
+        ) {
+            return false;
+        }
+
+        return crypto.verify(
+            "sha256",
+            Buffer.from(
+                String(message || ""),
+                "utf8"
+            ),
+            publicKey,
+            signature
+        );
+    } catch {
+        return false;
+    }
+}
+
+function cleanupExternalAuthSecurityRows() {
+    const now = nowISO();
+
+    db.prepare(`
+        DELETE FROM external_auth_challenges
+        WHERE expires_at < ?
+           OR (
+                used_at IS NOT NULL
+                AND used_at < datetime('now', '-1 day')
+           )
+    `).run(now);
+
+    db.prepare(`
+        DELETE FROM external_auth_sessions
+        WHERE expires_at < ?
+           OR revoked = 1
+    `).run(now);
+}
+
+setInterval(
+    cleanupExternalAuthSecurityRows,
+    60 * 1000
+).unref();
+
+function validateKeyForExternalAuth(
+    keyData
+) {
+    if (!keyData) {
+        return {
+            ok: false,
+            http: 404,
+            code: "KEY_NOT_FOUND",
+            message: "Key não encontrada"
+        };
+    }
+
+    const status =
+        checkKeyExpiration(
+            keyData
+        );
+
+    const fresh =
+        getKey(
+            keyData.key
+        );
+
+    if (status === "expired") {
+        return {
+            ok: false,
+            http: 403,
+            code: "KEY_EXPIRED",
+            status,
+            message: "Key expirada"
+        };
+    }
+
+    if (status === "paused") {
+        return {
+            ok: false,
+            http: 403,
+            code: "KEY_PAUSED",
+            status,
+            remaining_ms:
+                fresh?.remaining_ms || 0,
+            message: "Esta key está pausada."
+        };
+    }
+
+    return {
+        ok: true,
+        status,
+        keyData: fresh
+    };
+}
+
+function activateExternalAuthKeyIfNeeded(
+    keyData
+) {
+    let fresh =
+        getKey(
+            keyData.key
+        );
+
+    let status =
+        checkKeyExpiration(
+            fresh
+        );
+
+    fresh =
+        getKey(
+            fresh.key
+        );
+
+    if (status !== "unused") {
+        return {
+            status,
+            keyData: fresh
+        };
+    }
+
+    const days =
+        getDaysFromKey(
+            fresh
+        );
+
+    if (
+        !Number.isInteger(days) ||
+        days <= 0
+    ) {
+        const error =
+            new Error(
+                "Plano da key inválido"
+            );
+
+        error.code =
+            "INVALID_PLAN";
+
+        throw error;
+    }
+
+    const activatedAt =
+        nowISO();
+
+    const expiresAt =
+        calculateKeyExpiration(
+            fresh,
+            days
+        );
+
+    db.prepare(`
+        UPDATE keys
+        SET
+            status = 'active',
+            activated_at = ?,
+            expires_at = ?,
+            paused_at = NULL,
+            remaining_ms = NULL
+        WHERE id = ?
+    `).run(
+        activatedAt,
+        expiresAt,
+        fresh.id
+    );
+
+    return {
+        status: "active",
+        keyData:
+            getKey(
+                fresh.key
+            )
+    };
+}
+
+function createExternalAuthSession(
+    keyData,
+    hwid,
+    publicKeyHash,
+    buildMarker,
+    dylibHash
+) {
+    const token =
+        crypto.randomBytes(32)
+            .toString("hex");
+
+    const heartbeatNonce =
+        crypto.randomBytes(24)
+            .toString("hex");
+
+    const createdAt =
+        nowISO();
+
+    const expiresAt =
+        new Date(
+            Date.now() +
+            EXTERNAL_AUTH_V6_SESSION_SECONDS *
+            1000
+        ).toISOString();
+
+    db.prepare(`
+        INSERT INTO external_auth_sessions (
+            token_hash,
+            key_id,
+            hwid,
+            public_key_hash,
+            heartbeat_nonce,
+            build_marker,
+            dylib_hash,
+            created_at,
+            expires_at,
+            last_seen_at,
+            revoked
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(
+        hashToken(token),
+        keyData.id,
+        hwid,
+        publicKeyHash,
+        heartbeatNonce,
+        buildMarker,
+        normalizeSHA256(dylibHash) || null,
+        createdAt,
+        expiresAt,
+        createdAt
+    );
+
+    return {
+        token,
+        expiresAt,
+        heartbeatNonce
+    };
+}
+
+function getExternalAuthSession(
+    token
+) {
+    return db.prepare(`
+        SELECT
+            external_auth_sessions.*,
+            keys.key,
+            keys.status AS key_status,
+            keys.expires_at AS key_expires_at,
+            keys.remaining_ms AS key_remaining_ms,
+            keys.device_hwid,
+            keys.hwid_public_key_hash
+        FROM external_auth_sessions
+        INNER JOIN keys
+            ON keys.id =
+               external_auth_sessions.key_id
+        WHERE external_auth_sessions.token_hash = ?
+    `).get(
+        hashToken(token)
+    );
+}
+
 const DEFAULT_MAINTENANCE_MESSAGE =
     "Servidor pausado devido a uma manutenção.";
 
@@ -1658,6 +2164,83 @@ function masterOwnerRequired(req, res, next) {
 
     return next();
 }
+
+/* =========================================================
+   MASTER OWNER - PIN DA RELEASE EXTERNAL AUTH V6
+========================================================= */
+
+app.get(
+    "/api/admin/security/release",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        return res.json({
+            success: true,
+            ...getExternalAuthReleaseState()
+        });
+    }
+);
+
+app.post(
+    "/api/admin/security/release",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const hash =
+                normalizeSHA256(
+                    req.body.dylib_sha256
+                );
+
+            const enforce =
+                Boolean(
+                    req.body.enforce_hash
+                );
+
+            if (
+                hash &&
+                hash.length !== 64
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "SHA-256 da dylib deve ter 64 caracteres hexadecimais."
+                });
+            }
+
+            db.setSystemSetting(
+                "external_auth_v6_dylib_sha256",
+                hash
+            );
+
+            db.setSystemSetting(
+                "external_auth_v6_hash_enforced",
+                enforce ? "1" : "0"
+            );
+
+            return res.json({
+                success: true,
+                message:
+                    enforce
+                        ? "Pin de integridade V6 ativado."
+                        : "Pin de integridade V6 salvo sem bloqueio.",
+                ...getExternalAuthReleaseState()
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro configurando release V6:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Erro interno ao configurar release V6."
+            });
+        }
+    }
+);
 
 app.post("/api/auth/login", (req, res) => {
     try {
@@ -2782,30 +3365,70 @@ app.post("/api/keys/check", (req, res) => {
 });
 
 /* =========================================================
-   HWID AUTH - NOVA AUTH
-   Detecta o HWID na dylib e envia key + hwid.
-   Primeiro uso vincula e ativa; mesmo HWID libera; outro bloqueia.
+   EXTERNAL AUTH V6 - CHALLENGE ASSINADO
+   A auth deixa de confiar em key + HWID puro.
 ========================================================= */
 
 app.post(
-    "/api/keys/hwid/auth",
+    "/api/security/hwid/challenge",
     (req, res) => {
         try {
             if (maintenanceBlocked(res)) {
                 return;
             }
 
+            cleanupExternalAuthSecurityRows();
+
             const key =
-                String(req.body.key || "").trim();
+                String(
+                    req.body.key || ""
+                ).trim();
 
             const hwid =
-                normalizeHWID(req.body.hwid);
+                normalizeHWID(
+                    req.body.hwid
+                );
 
-            if (!key || !hwid) {
+            const publicKeyB64 =
+                String(
+                    req.body.public_key || ""
+                ).trim();
+
+            const publicKeyHash =
+                externalAuthPublicKeyHash(
+                    publicKeyB64
+                );
+
+            const buildMarker =
+                String(
+                    req.body.build_marker || ""
+                );
+
+            const appBuild =
+                String(
+                    req.body.app_build || ""
+                ).trim();
+
+            const appVersion =
+                String(
+                    req.body.app_version || ""
+                ).trim();
+
+            const dylibHash =
+                normalizeSHA256(
+                    req.body.dylib_hash
+                );
+
+            if (
+                !key ||
+                !hwid ||
+                !publicKeyHash
+            ) {
                 return res.status(400).json({
                     success: false,
-                    code: "KEY_HWID_REQUIRED",
-                    message: "Key e HWID são obrigatórios"
+                    code: "SECURITY_FIELDS_REQUIRED",
+                    message:
+                        "Key, HWID e chave pública são obrigatórios."
                 });
             }
 
@@ -2813,155 +3436,813 @@ app.post(
                 return res.status(400).json({
                     success: false,
                     code: "INVALID_HWID",
-                    message: "HWID inválido"
+                    message: "HWID inválido."
                 });
             }
 
-            let keyData = getKey(key);
+            const releaseCheck =
+                validateExternalAuthRelease(
+                    buildMarker,
+                    dylibHash
+                );
 
-            if (!keyData) {
-                return res.status(404).json({
-                    success: false,
-                    found: false,
-                    code: "KEY_NOT_FOUND",
-                    message: "Key não encontrada"
-                });
-            }
-
-            let status = checkKeyExpiration(keyData);
-            keyData = getKey(key);
-
-            if (status === "expired") {
+            if (!releaseCheck.ok) {
                 return res.status(403).json({
                     success: false,
-                    found: true,
-                    code: "KEY_EXPIRED",
-                    status,
-                    message: "Key expirada"
+                    code: releaseCheck.code,
+                    message: releaseCheck.message
                 });
             }
 
-            if (status === "paused") {
-                return res.status(403).json({
-                    success: false,
-                    found: true,
-                    code: "KEY_PAUSED",
-                    status,
-                    remaining_ms: keyData.remaining_ms,
-                    message: "Key pausada"
-                });
-            }
+            let keyData =
+                getKey(key);
 
-            if (keyData.device_hwid) {
-                if (
-                    normalizeHWID(keyData.device_hwid) !== hwid
-                ) {
-                    return res.status(403).json({
+            const keyCheck =
+                validateKeyForExternalAuth(
+                    keyData
+                );
+
+            if (!keyCheck.ok) {
+                return res
+                    .status(keyCheck.http)
+                    .json({
                         success: false,
-                        found: true,
-                        code: "DEVICE_MISMATCH",
-                        status,
-                        message: "Essa key já está vinculada a outro dispositivo."
+                        code: keyCheck.code,
+                        status:
+                            keyCheck.status || null,
+                        remaining_ms:
+                            keyCheck.remaining_ms || null,
+                        message:
+                            keyCheck.message
                     });
-                }
-            } else {
-                const boundAt = nowISO();
+            }
 
-                const bound = db.prepare(`
-                    UPDATE keys
-                    SET
-                        device_hwid = ?,
-                        hwid_bound_at = ?,
-                        hwid_reset_at = NULL
-                    WHERE id = ?
-                      AND device_hwid IS NULL
-                `).run(
+            keyData =
+                keyCheck.keyData;
+
+            if (
+                keyData.device_hwid &&
+                normalizeHWID(
+                    keyData.device_hwid
+                ) !== hwid
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    code: "DEVICE_MISMATCH",
+                    message:
+                        "Essa key já está vinculada a outro dispositivo."
+                });
+            }
+
+            if (
+                keyData.hwid_public_key_hash &&
+                String(
+                    keyData.hwid_public_key_hash
+                ) !== publicKeyHash
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    code: "DEVICE_KEY_MISMATCH",
+                    message:
+                        "A chave criptográfica deste dispositivo não corresponde ao vínculo da licença."
+                });
+            }
+
+            // Invalida desafios pendentes anteriores
+            // da mesma key para reduzir replay/sessões paralelas.
+            db.prepare(`
+                DELETE FROM external_auth_challenges
+                WHERE key_id = ?
+                  AND used_at IS NULL
+            `).run(
+                keyData.id
+            );
+
+            const challengeId =
+                crypto.randomUUID();
+
+            const nonce =
+                crypto.randomBytes(32)
+                    .toString("hex");
+
+            const createdAt =
+                nowISO();
+
+            const expiresAt =
+                new Date(
+                    Date.now() +
+                    EXTERNAL_AUTH_V6_CHALLENGE_SECONDS *
+                    1000
+                ).toISOString();
+
+            const messageToSign =
+                [
+                    "EXTERNAL-AUTH-V6",
+                    challengeId,
+                    nonce,
+                    keyData.key,
                     hwid,
-                    boundAt,
-                    keyData.id
-                );
+                    EXTERNAL_AUTH_V6_BUILD_MARKER,
+                    appBuild,
+                    dylibHash
+                ].join("|");
 
-                if (bound.changes !== 1) {
-                    const latest = getKey(key);
-
-                    if (
-                        !latest ||
-                        normalizeHWID(latest.device_hwid) !== hwid
-                    ) {
-                        return res.status(403).json({
-                            success: false,
-                            found: true,
-                            code: "DEVICE_MISMATCH",
-                            status,
-                            message: "Essa key já está vinculada a outro dispositivo."
-                        });
-                    }
-                }
-
-                keyData = getKey(key);
-            }
-
-            if (status === "unused") {
-                const days = getDaysFromKey(keyData);
-
-                if (!Number.isInteger(days) || days <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        code: "INVALID_PLAN",
-                        message: "Plano da key inválido"
-                    });
-                }
-
-                const activatedAt = nowISO();
-                const expiresAt =
-                    calculateKeyExpiration(
-                        keyData,
-                        days
-                    );
-
-                db.prepare(`
-                    UPDATE keys
-                    SET
-                        status = 'active',
-                        activated_at = ?,
-                        expires_at = ?,
-                        paused_at = NULL,
-                        remaining_ms = NULL
-                    WHERE id = ?
-                `).run(
-                    activatedAt,
-                    expiresAt,
-                    keyData.id
-                );
-
-                keyData = getKey(key);
-                status = "active";
-            }
+            db.prepare(`
+                INSERT INTO external_auth_challenges (
+                    challenge_id,
+                    key_id,
+                    hwid,
+                    public_key_b64,
+                    public_key_hash,
+                    nonce,
+                    message_to_sign,
+                    build_marker,
+                    app_build,
+                    app_version,
+                    dylib_hash,
+                    created_at,
+                    expires_at,
+                    used_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            `).run(
+                challengeId,
+                keyData.id,
+                hwid,
+                publicKeyB64,
+                publicKeyHash,
+                nonce,
+                messageToSign,
+                EXTERNAL_AUTH_V6_BUILD_MARKER,
+                appBuild || null,
+                appVersion || null,
+                dylibHash || null,
+                createdAt,
+                expiresAt
+            );
 
             return res.json({
                 success: true,
-                found: true,
-                key: keyData.key,
-                prefix: keyData.prefix,
-                status,
-                days: getDaysFromKey(keyData),
-                activated_at: keyData.activated_at,
-                expires_at: keyData.expires_at,
-                paused_at: keyData.paused_at,
-                remaining_ms: keyData.remaining_ms,
-                hwid_bound: true,
-                hwid: keyData.device_hwid,
-                hwid_bound_at: keyData.hwid_bound_at
+                challenge_id:
+                    challengeId,
+                message_to_sign:
+                    messageToSign,
+                expires_at:
+                    expiresAt,
+                server_time:
+                    createdAt,
+                hash_enforced:
+                    Boolean(
+                        releaseCheck
+                            .release
+                            ?.hash_enforced
+                    )
             });
 
         } catch (error) {
-            console.error("Erro na autenticação HWID:", error);
+            console.error(
+                "Erro criando challenge V6:",
+                error
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Erro interno na autenticação HWID"
+                code: "SECURITY_CHALLENGE_ERROR",
+                message:
+                    "Não foi possível iniciar a autenticação segura."
             });
         }
+    }
+);
+
+app.post(
+    "/api/security/hwid/verify",
+    (req, res) => {
+        try {
+            if (maintenanceBlocked(res)) {
+                return;
+            }
+
+            cleanupExternalAuthSecurityRows();
+
+            const challengeId =
+                String(
+                    req.body.challenge_id || ""
+                ).trim();
+
+            const signatureB64 =
+                String(
+                    req.body.signature || ""
+                ).trim();
+
+            if (
+                !challengeId ||
+                !signatureB64
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    code: "SIGNATURE_REQUIRED",
+                    message:
+                        "Challenge e assinatura são obrigatórios."
+                });
+            }
+
+            const challenge =
+                db.prepare(`
+                    SELECT
+                        external_auth_challenges.*,
+                        keys.key
+                    FROM external_auth_challenges
+                    INNER JOIN keys
+                        ON keys.id =
+                           external_auth_challenges.key_id
+                    WHERE external_auth_challenges.challenge_id = ?
+                `).get(
+                    challengeId
+                );
+
+            if (!challenge) {
+                return res.status(404).json({
+                    success: false,
+                    code: "CHALLENGE_NOT_FOUND",
+                    message:
+                        "Challenge não encontrado."
+                });
+            }
+
+            if (challenge.used_at) {
+                return res.status(409).json({
+                    success: false,
+                    code: "REPLAY_BLOCKED",
+                    message:
+                        "Este challenge já foi utilizado."
+                });
+            }
+
+            if (
+                new Date(
+                    challenge.expires_at
+                ).getTime() <= Date.now()
+            ) {
+                return res.status(410).json({
+                    success: false,
+                    code: "CHALLENGE_EXPIRED",
+                    message:
+                        "Challenge expirado."
+                });
+            }
+
+            const releaseCheck =
+                validateExternalAuthRelease(
+                    challenge.build_marker,
+                    challenge.dylib_hash
+                );
+
+            if (!releaseCheck.ok) {
+                return res.status(403).json({
+                    success: false,
+                    code: releaseCheck.code,
+                    message: releaseCheck.message
+                });
+            }
+
+            let keyData =
+                getKey(
+                    challenge.key
+                );
+
+            const keyCheck =
+                validateKeyForExternalAuth(
+                    keyData
+                );
+
+            if (!keyCheck.ok) {
+                return res
+                    .status(keyCheck.http)
+                    .json({
+                        success: false,
+                        code: keyCheck.code,
+                        status:
+                            keyCheck.status || null,
+                        remaining_ms:
+                            keyCheck.remaining_ms || null,
+                        message:
+                            keyCheck.message
+                    });
+            }
+
+            keyData =
+                keyCheck.keyData;
+
+            if (
+                keyData.device_hwid &&
+                normalizeHWID(
+                    keyData.device_hwid
+                ) !==
+                normalizeHWID(
+                    challenge.hwid
+                )
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    code: "DEVICE_MISMATCH",
+                    message:
+                        "Essa key já está vinculada a outro dispositivo."
+                });
+            }
+
+            const challengePublicKeyHash =
+                String(
+                    challenge.public_key_hash ||
+                    ""
+                );
+
+            if (
+                keyData.hwid_public_key_hash &&
+                String(
+                    keyData.hwid_public_key_hash
+                ) !==
+                challengePublicKeyHash
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    code: "DEVICE_KEY_MISMATCH",
+                    message:
+                        "A chave criptográfica deste dispositivo não corresponde à licença."
+                });
+            }
+
+            const signatureOK =
+                verifyExternalAuthSignature(
+                    challenge.public_key_b64,
+                    challenge.message_to_sign,
+                    signatureB64
+                );
+
+            if (!signatureOK) {
+                return res.status(403).json({
+                    success: false,
+                    code: "SIGNATURE_INVALID",
+                    message:
+                        "Assinatura criptográfica inválida."
+                });
+            }
+
+            const complete =
+                db.transaction(() => {
+                    const current =
+                        getKey(
+                            challenge.key
+                        );
+
+                    if (!current) {
+                        const error =
+                            new Error(
+                                "Key não encontrada"
+                            );
+                        error.code =
+                            "KEY_NOT_FOUND";
+                        throw error;
+                    }
+
+                    if (
+                        current.device_hwid &&
+                        normalizeHWID(
+                            current.device_hwid
+                        ) !==
+                        normalizeHWID(
+                            challenge.hwid
+                        )
+                    ) {
+                        const error =
+                            new Error(
+                                "Essa key já está vinculada a outro dispositivo."
+                            );
+                        error.code =
+                            "DEVICE_MISMATCH";
+                        throw error;
+                    }
+
+                    if (
+                        current.hwid_public_key_hash &&
+                        String(
+                            current.hwid_public_key_hash
+                        ) !==
+                        challengePublicKeyHash
+                    ) {
+                        const error =
+                            new Error(
+                                "Chave criptográfica do dispositivo divergente."
+                            );
+                        error.code =
+                            "DEVICE_KEY_MISMATCH";
+                        throw error;
+                    }
+
+                    const boundAt =
+                        current.hwid_bound_at ||
+                        nowISO();
+
+                    db.prepare(`
+                        UPDATE keys
+                        SET
+                            device_hwid = COALESCE(device_hwid, ?),
+                            hwid_bound_at = COALESCE(hwid_bound_at, ?),
+                            hwid_reset_at = NULL,
+                            hwid_public_key_b64 = COALESCE(hwid_public_key_b64, ?),
+                            hwid_public_key_hash = COALESCE(hwid_public_key_hash, ?)
+                        WHERE id = ?
+                    `).run(
+                        normalizeHWID(
+                            challenge.hwid
+                        ),
+                        boundAt,
+                        challenge.public_key_b64,
+                        challengePublicKeyHash,
+                        current.id
+                    );
+
+                    db.prepare(`
+                        UPDATE external_auth_challenges
+                        SET used_at = ?
+                        WHERE id = ?
+                          AND used_at IS NULL
+                    `).run(
+                        nowISO(),
+                        challenge.id
+                    );
+
+                    const activated =
+                        activateExternalAuthKeyIfNeeded(
+                            getKey(
+                                challenge.key
+                            )
+                        );
+
+                    const session =
+                        createExternalAuthSession(
+                            activated.keyData,
+                            normalizeHWID(
+                                challenge.hwid
+                            ),
+                            challengePublicKeyHash,
+                            challenge.build_marker,
+                            challenge.dylib_hash
+                        );
+
+                    return {
+                        keyData:
+                            activated.keyData,
+                        status:
+                            activated.status,
+                        session
+                    };
+                });
+
+            return res.json({
+                success: true,
+                key:
+                    complete.keyData.key,
+                status:
+                    complete.status,
+                activated_at:
+                    complete.keyData.activated_at,
+                expires_at:
+                    complete.keyData.expires_at,
+                remaining_ms:
+                    complete.keyData.remaining_ms,
+                hwid:
+                    complete.keyData.device_hwid,
+                session_token:
+                    complete.session.token,
+                session_expires_at:
+                    complete.session.expiresAt,
+                heartbeat_nonce:
+                    complete.session.heartbeatNonce,
+                heartbeat_after:
+                    EXTERNAL_AUTH_V6_HEARTBEAT_SECONDS,
+                server_time:
+                    nowISO()
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro verificando assinatura V6:",
+                error
+            );
+
+            const code =
+                error?.code || "";
+
+            if (
+                code ===
+                    "DEVICE_MISMATCH" ||
+                code ===
+                    "DEVICE_KEY_MISMATCH"
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    code,
+                    message:
+                        error.message
+                });
+            }
+
+            if (
+                code ===
+                "INVALID_PLAN"
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    code,
+                    message:
+                        error.message
+                });
+            }
+
+            return res.status(500).json({
+                success: false,
+                code: "SECURITY_VERIFY_ERROR",
+                message:
+                    "Não foi possível concluir a autenticação segura."
+            });
+        }
+    }
+);
+
+app.post(
+    "/api/security/session/heartbeat",
+    (req, res) => {
+        try {
+            if (maintenanceBlocked(res)) {
+                return;
+            }
+
+            cleanupExternalAuthSecurityRows();
+
+            const token =
+                getBearerToken(req);
+
+            if (!token) {
+                return res.status(401).json({
+                    success: false,
+                    code: "SESSION_REQUIRED",
+                    message:
+                        "Sessão segura obrigatória."
+                });
+            }
+
+            const session =
+                getExternalAuthSession(
+                    token
+                );
+
+            if (!session) {
+                return res.status(401).json({
+                    success: false,
+                    code: "SESSION_INVALID",
+                    message:
+                        "Sessão segura inválida."
+                });
+            }
+
+            if (session.revoked) {
+                return res.status(401).json({
+                    success: false,
+                    code: "SESSION_REVOKED",
+                    message:
+                        "Sessão revogada."
+                });
+            }
+
+            if (
+                new Date(
+                    session.expires_at
+                ).getTime() <= Date.now()
+            ) {
+                return res.status(401).json({
+                    success: false,
+                    code: "SESSION_EXPIRED",
+                    message:
+                        "Sessão segura expirada."
+                });
+            }
+
+            const buildMarker =
+                String(
+                    req.body.build_marker || ""
+                );
+
+            const dylibHash =
+                normalizeSHA256(
+                    req.body.dylib_hash
+                );
+
+            const signatureB64 =
+                String(
+                    req.body.signature || ""
+                ).trim();
+
+            if (!signatureB64) {
+                return res.status(400).json({
+                    success: false,
+                    code: "HEARTBEAT_SIGNATURE_REQUIRED",
+                    message:
+                        "Assinatura do heartbeat é obrigatória."
+                });
+            }
+
+            const releaseCheck =
+                validateExternalAuthRelease(
+                    buildMarker,
+                    dylibHash
+                );
+
+            if (!releaseCheck.ok) {
+                db.prepare(`
+                    UPDATE external_auth_sessions
+                    SET revoked = 1
+                    WHERE id = ?
+                `).run(
+                    session.id
+                );
+
+                return res.status(403).json({
+                    success: false,
+                    code: releaseCheck.code,
+                    message:
+                        releaseCheck.message
+                });
+            }
+
+            let keyData =
+                getKey(
+                    session.key
+                );
+
+            const keyCheck =
+                validateKeyForExternalAuth(
+                    keyData
+                );
+
+            if (!keyCheck.ok) {
+                db.prepare(`
+                    UPDATE external_auth_sessions
+                    SET revoked = 1
+                    WHERE id = ?
+                `).run(
+                    session.id
+                );
+
+                return res
+                    .status(keyCheck.http)
+                    .json({
+                        success: false,
+                        code: keyCheck.code,
+                        status:
+                            keyCheck.status || null,
+                        remaining_ms:
+                            keyCheck.remaining_ms || null,
+                        message:
+                            keyCheck.message
+                    });
+            }
+
+            keyData =
+                keyCheck.keyData;
+
+            if (
+                !keyData.device_hwid ||
+                normalizeHWID(
+                    keyData.device_hwid
+                ) !==
+                normalizeHWID(
+                    session.hwid
+                ) ||
+                !keyData.hwid_public_key_hash ||
+                String(
+                    keyData.hwid_public_key_hash
+                ) !==
+                String(
+                    session.public_key_hash
+                )
+            ) {
+                db.prepare(`
+                    UPDATE external_auth_sessions
+                    SET revoked = 1
+                    WHERE id = ?
+                `).run(
+                    session.id
+                );
+
+                return res.status(403).json({
+                    success: false,
+                    code: "DEVICE_BINDING_CHANGED",
+                    message:
+                        "O vínculo deste dispositivo foi alterado."
+                });
+            }
+
+            const heartbeatMessage =
+                [
+                    "EXTERNAL-HEARTBEAT-V1",
+                    token,
+                    String(session.heartbeat_nonce || ""),
+                    buildMarker,
+                    dylibHash
+                ].join("|");
+
+            const heartbeatSignatureOK =
+                verifyExternalAuthSignature(
+                    keyData.hwid_public_key_b64,
+                    heartbeatMessage,
+                    signatureB64
+                );
+
+            if (!heartbeatSignatureOK) {
+                db.prepare(`
+                    UPDATE external_auth_sessions
+                    SET revoked = 1
+                    WHERE id = ?
+                `).run(
+                    session.id
+                );
+
+                return res.status(403).json({
+                    success: false,
+                    code: "HEARTBEAT_SIGNATURE_INVALID",
+                    message:
+                        "Assinatura do heartbeat inválida."
+                });
+            }
+
+            const nextHeartbeatNonce =
+                crypto.randomBytes(24)
+                    .toString("hex");
+
+            db.prepare(`
+                UPDATE external_auth_sessions
+                SET
+                    last_seen_at = ?,
+                    heartbeat_nonce = ?
+                WHERE id = ?
+            `).run(
+                nowISO(),
+                nextHeartbeatNonce,
+                session.id
+            );
+
+            return res.json({
+                success: true,
+                status:
+                    keyCheck.status,
+                key:
+                    keyData.key,
+                expires_at:
+                    keyData.expires_at,
+                remaining_ms:
+                    keyData.remaining_ms,
+                session_expires_at:
+                    session.expires_at,
+                heartbeat_nonce:
+                    nextHeartbeatNonce,
+                heartbeat_after:
+                    EXTERNAL_AUTH_V6_HEARTBEAT_SECONDS,
+                server_time:
+                    nowISO()
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro no heartbeat V6:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                code: "HEARTBEAT_ERROR",
+                message:
+                    "Erro interno ao validar sessão segura."
+            });
+        }
+    }
+);
+
+/* =========================================================
+   AUTH HWID V5 LEGADA - DESATIVADA
+   Manter este endpoint ativo permitiria contornar o fluxo
+   challenge + assinatura da V6.
+========================================================= */
+
+app.post(
+    "/api/keys/hwid/auth",
+    (req, res) => {
+        return res.status(426).json({
+            success: false,
+            code: "AUTH_UPGRADE_REQUIRED",
+            message:
+                "Esta versão da autenticação foi desativada. Atualize o aplicativo."
+        });
     }
 );
 
@@ -3339,6 +4620,8 @@ app.post(
                     device_reset_at = ?,
                     device_hwid = NULL,
                     hwid_bound_at = NULL,
+                    hwid_public_key_b64 = NULL,
+                    hwid_public_key_hash = NULL,
                     hwid_reset_at = ?
                 WHERE id = ?
             `).run(
@@ -3418,6 +4701,8 @@ app.post(
                 SET
                     device_hwid = NULL,
                     hwid_bound_at = NULL,
+                    hwid_public_key_b64 = NULL,
+                    hwid_public_key_hash = NULL,
                     hwid_reset_at = ?
                 WHERE id = ?
             `).run(
@@ -6132,6 +7417,8 @@ app.post(
                 SET
                     device_hwid = NULL,
                     hwid_bound_at = NULL,
+                    hwid_public_key_b64 = NULL,
+                    hwid_public_key_hash = NULL,
                     hwid_reset_at = ?
                 WHERE id = ?
             `).run(
