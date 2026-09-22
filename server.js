@@ -3897,7 +3897,7 @@ app.post(
                             activated.status,
                         session
                     };
-                });
+                })();
 
             return res.json({
                 success: true,
@@ -8252,3 +8252,5 @@ app.listen(PORT, HOST, () => {
     console.log("Master owner: nextaway");
     console.log("=================================");
 });
+
+    
