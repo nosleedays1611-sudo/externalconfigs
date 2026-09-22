@@ -31,6 +31,11 @@ db.exec(`
         device_bound_at TEXT,
         device_reset_at TEXT,
 
+        device_hwid TEXT,
+        hwid_bound_at TEXT,
+        hwid_reset_at TEXT,
+        bonus_ms INTEGER NOT NULL DEFAULT 0,
+
         created_by_user_id INTEGER,
 
         FOREIGN KEY (created_by_user_id)
@@ -179,6 +184,20 @@ db.exec(`
 
 /*
 ==================================================
+CONFIGURAÇÕES GLOBAIS DO SISTEMA
+==================================================
+*/
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+`);
+
+/*
+==================================================
 MIGRAÇÕES
 ==================================================
 */
@@ -248,6 +267,30 @@ addColumnIfMissing(
     "keys",
     "created_by_user_id",
     "INTEGER REFERENCES users(id) ON DELETE SET NULL"
+);
+
+addColumnIfMissing(
+    "keys",
+    "device_hwid",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "keys",
+    "hwid_bound_at",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "keys",
+    "hwid_reset_at",
+    "TEXT"
+);
+
+addColumnIfMissing(
+    "keys",
+    "bonus_ms",
+    "INTEGER NOT NULL DEFAULT 0"
 );
 
 /*
@@ -337,6 +380,17 @@ db.prepare(`
     WHERE LOWER(username) = LOWER('nextaway')
 `).run();
 
+/* Configuração inicial do modo manutenção. */
+db.prepare(`
+    INSERT OR IGNORE INTO system_settings (key, value)
+    VALUES ('maintenance_enabled', '0')
+`).run();
+
+db.prepare(`
+    INSERT OR IGNORE INTO system_settings (key, value)
+    VALUES ('maintenance_message', 'Servidor pausado devido a uma manutenção.')
+`).run();
+
 /*
 ==================================================
 ÍNDICES
@@ -349,6 +403,9 @@ db.exec(`
 
     CREATE INDEX IF NOT EXISTS idx_keys_udid
     ON keys(device_udid);
+
+    CREATE INDEX IF NOT EXISTS idx_keys_hwid
+    ON keys(device_hwid);
 
     CREATE INDEX IF NOT EXISTS idx_keys_created_by_user
     ON keys(created_by_user_id);
@@ -470,6 +527,48 @@ db.logAction = function (
         targetType,
         targetId
     );
+};
+
+db.getSystemSetting = function (key, fallback = null) {
+    const row = db.prepare(`
+        SELECT value
+        FROM system_settings
+        WHERE key = ?
+    `).get(String(key || ""));
+
+    return row ? row.value : fallback;
+};
+
+db.setSystemSetting = function (key, value) {
+    const normalizedKey = String(key || "").trim();
+    const normalizedValue = String(value ?? "");
+
+    const existing = db.prepare(`
+        SELECT key
+        FROM system_settings
+        WHERE key = ?
+    `).get(normalizedKey);
+
+    if (existing) {
+        db.prepare(`
+            UPDATE system_settings
+            SET
+                value = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE key = ?
+        `).run(normalizedValue, normalizedKey);
+    } else {
+        db.prepare(`
+            INSERT INTO system_settings (
+                key,
+                value,
+                updated_at
+            )
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        `).run(normalizedKey, normalizedValue);
+    }
+
+    return normalizedValue;
 };
 
 module.exports = db;
