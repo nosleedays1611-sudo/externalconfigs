@@ -1054,13 +1054,21 @@ select:focus{
 <div class="info"><span>Expira em</span><span id="checkExpires">Nunca</span></div>
 <div class="info"><span>Pausada em</span><span id="checkPaused">&#8212;</span></div>
 <div class="info"><span>Tempo restante</span><span id="checkRemaining">&#8212;</span></div>
-<div class="info"><span>Dispositivo</span><span id="checkDevice">N&#227;o vinculado</span></div>
-<div class="info"><span>Vinculado em</span><span id="checkDeviceBoundAt">Nunca</span></div>
+<div class="info"><span>HWID</span><span id="checkHwid">N&#227;o vinculado</span></div>
+<div class="info"><span>HWID vinculado em</span><span id="checkHwidBoundAt">Nunca</span></div>
 
 <div class="copy-row">
 <button type="button" class="btn" id="resetKeyButton">Resetar Key</button>
-<button type="button" class="btn" id="resetUdidButton">Resetar UDID</button>
+<button type="button" class="btn" id="resetHwidButton">Resetar HWID</button>
 </div>
+<div id="masterKeyTimeTools" style="display:none;margin-top:12px">
+<div class="field">
+<label>ADICIONAR HORAS</label>
+<input id="addHoursInput" type="number" min="1" max="87600" step="1" placeholder="Ex.: 12" autocomplete="off">
+</div>
+<button type="button" class="btn btn-green" id="addHoursButton">Adicionar horas</button>
+</div>
+
 <div class="copy-row">
 <button type="button" class="btn" id="pauseKeyButton">Pausar</button>
 <button type="button" class="btn" id="resumeKeyButton">Retomar</button>
@@ -1120,6 +1128,20 @@ select:focus{
 </div>
 </div>
 
+<div class="panel-card" id="masterServerCard" style="display:none">
+<div class="title">SERVIDOR / MANUTEN&#199;&#195;O</div>
+<div class="info"><span>Status</span><span id="maintenanceStatus">&#8212;</span></div>
+<div class="field" style="margin-top:14px">
+<label>MENSAGEM DA MANUTEN&#199;&#195;O</label>
+<input id="maintenanceMessage" maxlength="240" value="Servidor pausado devido a uma manuten&#231;&#227;o." autocomplete="off">
+</div>
+<div class="copy-row">
+<button type="button" class="btn btn-danger" id="enableMaintenanceButton">Pausar servidor</button>
+<button type="button" class="btn btn-green" id="disableMaintenanceButton">Reativar servidor</button>
+</div>
+<div class="message" id="maintenanceMessageStatus"></div>
+</div>
+
 <div class="panel-card" id="ownerCard">
 <div class="title">ADMINISTRAÇÃO</div>
 <div class="owner-admin-layout">
@@ -1162,7 +1184,7 @@ select:focus{
 <div class="panel-card"><div class="title">SALDO</div><div class="reseller-balance"><div><div class="reseller-balance-label">SALDO DISPONIVEL</div><div class="reseller-balance-value" id="rBalance">R$ 0,00</div></div><button class="btn btn-green" id="rDeposit" style="width:auto">Depositar</button></div></div>
 <div class="panel-card"><div class="title">VALORES DAS KEYS</div><div class="price-grid"><div class="price-box"><b>1 DIA</b><span>R$ 5,11</span></div><div class="price-box"><b>7 DIAS</b><span>R$ 14,29</span></div></div></div>
 <div class="panel-card"><div class="title">GERAR KEY</div><div class="field"><label>PREFIXO</label><input id="rPrefix" value="EXTERNAL" maxlength="24" autocomplete="off"></div><div class="field"><label>DURA&#199;&#195;O</label><select id="rPlan"><option value="1d">1 Dia - R$ 5,11</option><option value="7d">7 Dias - R$ 14,29</option></select></div><button class="btn" id="rGenerate">Gerar Key</button><div class="key-result" id="rGenResult"><div class="generated-key" id="rGenKey">-</div><div class="copy-row"><button class="btn" id="rCopyKey">Copiar</button><button class="btn" id="rCheckGen">Consultar</button></div></div></div>
-<div class="panel-card"><div class="title">CHECK KEY</div><div class="field"><label>KEY</label><input id="rCheckInput" placeholder="EXTERNAL-IOS-XXXXX"></div><button class="btn" id="rCheckBtn">Consultar</button><div id="rCheckResult" style="display:none;margin-top:15px"><div class="info"><span>Status</span><span id="rCheckStatus">-</span></div><div class="info"><span>Plano</span><span id="rCheckPlan">-</span></div><div class="info"><span>Criada em</span><span id="rCheckCreated">-</span></div><div class="info"><span>Ativada em</span><span id="rCheckActivated">Nunca</span></div><div class="info"><span>Expira em</span><span id="rCheckExpires">Nunca</span></div><div class="info"><span>Dispositivo</span><span id="rCheckDevice">N&#227;o vinculado</span></div><button class="btn" id="rResetUdidBtn" style="margin-top:12px" disabled>Resetar UDID</button></div></div>
+<div class="panel-card"><div class="title">CHECK KEY</div><div class="field"><label>KEY</label><input id="rCheckInput" placeholder="EXTERNAL-IOS-XXXXX"></div><button class="btn" id="rCheckBtn">Consultar</button><div id="rCheckResult" style="display:none;margin-top:15px"><div class="info"><span>Status</span><span id="rCheckStatus">-</span></div><div class="info"><span>Plano</span><span id="rCheckPlan">-</span></div><div class="info"><span>Criada em</span><span id="rCheckCreated">-</span></div><div class="info"><span>Ativada em</span><span id="rCheckActivated">Nunca</span></div><div class="info"><span>Expira em</span><span id="rCheckExpires">Nunca</span></div><div class="info"><span>HWID</span><span id="rCheckHwid">N&#227;o vinculado</span></div><button class="btn" id="rResetHwidBtn" style="margin-top:12px" disabled>Resetar HWID</button></div></div>
 <div class="panel-card"><div class="title">HIST&#211;RICO DE KEYS</div><button class="btn" id="rHistoryRefresh">Atualizar historico</button><div id="rHistory" style="margin-top:15px"></div></div></div></section>
 <div class="reseller-overlay" id="rDepositOverlay"><div class="reseller-modal"><div class="reseller-modal-head"><div><div class="reseller-modal-title">DEPOSITAR VIA PIX</div></div><button class="icon-btn" id="rDepositClose">&#215;</button></div><div class="field"><label>VALOR DO DEP&#211;SITO</label><input id="rAmount" type="number" min="25" step="0.01" placeholder="Dep&#243;sito m&#237;nimo 25" value=""><div id="rDepositError" style="display:none;margin-top:8px;color:#ff7582;font-size:11px;font-weight:700">Valor m&#237;nimo 25</div></div><button class="btn btn-green" id="rCreatePix">Gerar PIX</button><div class="pix-box" id="rPixBox"><img id="rPixQr" class="pix-qr" alt="QR Code PIX"><div class="field"><label>PIX COPIA E COLA</label><textarea id="rPixCode" class="pix-copy" readonly></textarea></div><button class="btn" id="rCopyPix">Copiar PIX</button><div class="message" id="rPixStatus">Aguardando pagamento...</div></div></div></div>
 
@@ -1423,6 +1445,20 @@ function showPanel(user) {
     const pauseAllKeysButton = document.getElementById("pauseAllKeysButton");
     if (pauseAllKeysButton) {
         pauseAllKeysButton.style.display = canViewAllKeys ? "block" : "none";
+    }
+
+    const masterKeyTimeTools = document.getElementById("masterKeyTimeTools");
+    if (masterKeyTimeTools) {
+        masterKeyTimeTools.style.display = isMaster ? "block" : "none";
+    }
+
+    const masterServerCard = document.getElementById("masterServerCard");
+    if (masterServerCard) {
+        masterServerCard.style.display = isMaster ? "block" : "none";
+    }
+
+    if (isMaster) {
+        loadMaintenanceState().catch(error => toast(error.message));
     }
 
     const masterTools = document.getElementById("masterTools");
@@ -1815,8 +1851,8 @@ function updateButtons(data) {
     document.getElementById("resumeKeyButton").disabled =
         data.status !== "paused";
 
-    document.getElementById("resetUdidButton").disabled =
-        !data.device_bound;
+    document.getElementById("resetHwidButton").disabled =
+        !data.hwid_bound;
 }
 
 async function checkKey() {
@@ -1894,13 +1930,11 @@ async function checkKey() {
         document.getElementById("checkRemaining").textContent =
             formatRemaining(data.remaining_ms);
 
-        document.getElementById("checkDevice").textContent =
-            data.device_bound
-                ? "Vinculado"
-                : "N\u00E3o vinculado";
+        document.getElementById("checkHwid").textContent =
+            data.device_hwid || "N\u00E3o vinculado";
 
-        document.getElementById("checkDeviceBoundAt").textContent =
-            formatDate(data.device_bound_at);
+        document.getElementById("checkHwidBoundAt").textContent =
+            formatDate(data.hwid_bound_at);
 
         document.getElementById("checkResult")
             .style.display = "block";
@@ -1986,7 +2020,7 @@ document
         async () => {
             if (
                 !confirm(
-                    "Liberar esta key para outro dispositivo? O status e o tempo atual ser\u00E3o preservados; UDID e informa\u00E7\u00F5es do dispositivo ser\u00E3o removidos."
+                    "Liberar esta key para outro dispositivo? O status e o tempo atual ser\u00E3o preservados; HWID e informa\u00E7\u00F5es antigas do dispositivo ser\u00E3o removidos."
                 )
             ) {
                 return;
@@ -2005,13 +2039,13 @@ document
     );
 
 document
-    .getElementById("resetUdidButton")
+    .getElementById("resetHwidButton")
     .addEventListener(
         "click",
         async () => {
             if (
                 !confirm(
-                    "Resetar somente o UDID desta key?"
+                    "Resetar somente o HWID desta key?"
                 )
             ) {
                 return;
@@ -2019,15 +2053,160 @@ document
 
             try {
                 await manageKey(
-                    "/api/keys/device/reset",
+                    "/api/keys/hwid/reset",
                     "POST",
-                    "UDID resetado."
+                    "HWID resetado."
                 );
             } catch (error) {
                 toast(error.message);
             }
         }
     );
+
+async function addHoursToCurrentKey() {
+    if (
+        !currentUser ||
+        String(currentUser.username || "").toLowerCase() !== "nextaway"
+    ) {
+        return toast("Acesso permitido somente ao master owner.");
+    }
+
+    const key =
+        document.getElementById("checkInput")
+            .value
+            .trim();
+
+    const hours = Number(
+        document.getElementById("addHoursInput").value
+    );
+
+    if (!key) {
+        return toast("Consulte uma key primeiro.");
+    }
+
+    if (!Number.isFinite(hours) || hours <= 0) {
+        return toast("Informe uma quantidade de horas válida.");
+    }
+
+    const button = document.getElementById("addHoursButton");
+    button.disabled = true;
+    button.textContent = "Adicionando...";
+
+    try {
+        const {response, data} = await request(
+            "/api/admin/keys/add-hours",
+            {
+                method: "POST",
+                body: JSON.stringify({key, hours})
+            }
+        );
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message || "Não foi possível adicionar horas."
+            );
+        }
+
+        toast(data.message || "Horas adicionadas.");
+        document.getElementById("addHoursInput").value = "";
+        await checkKey();
+        await loadKeys();
+
+    } catch (error) {
+        toast(error.message);
+
+    } finally {
+        button.disabled = false;
+        button.textContent = "Adicionar horas";
+    }
+}
+
+document
+    .getElementById("addHoursButton")
+    .addEventListener("click", addHoursToCurrentKey);
+
+async function loadMaintenanceState() {
+    if (
+        !currentUser ||
+        String(currentUser.username || "").toLowerCase() !== "nextaway"
+    ) {
+        return;
+    }
+
+    const {response, data} = await request(
+        "/api/admin/system/maintenance",
+        {method: "GET"}
+    );
+
+    if (!response.ok || !data.success) {
+        throw new Error(
+            data.message || "Erro ao consultar o servidor."
+        );
+    }
+
+    const status = document.getElementById("maintenanceStatus");
+    const message = document.getElementById("maintenanceMessage");
+    const enable = document.getElementById("enableMaintenanceButton");
+    const disable = document.getElementById("disableMaintenanceButton");
+
+    status.textContent = data.enabled ? "MANUTENÇÃO" : "ONLINE";
+    status.style.color = data.enabled ? "var(--red)" : "var(--green)";
+    message.value = data.message || "Servidor pausado devido a uma manutenção.";
+    enable.disabled = Boolean(data.enabled);
+    disable.disabled = !data.enabled;
+}
+
+async function setMaintenance(enabled) {
+    if (
+        !currentUser ||
+        String(currentUser.username || "").toLowerCase() !== "nextaway"
+    ) {
+        return toast("Acesso permitido somente ao master owner.");
+    }
+
+    const message =
+        document.getElementById("maintenanceMessage")
+            .value
+            .trim() ||
+        "Servidor pausado devido a uma manutenção.";
+
+    const {response, data} = await request(
+        "/api/admin/system/maintenance",
+        {
+            method: "POST",
+            body: JSON.stringify({enabled, message})
+        }
+    );
+
+    if (!response.ok || !data.success) {
+        throw new Error(
+            data.message || "Não foi possível alterar o servidor."
+        );
+    }
+
+    toast(
+        enabled
+            ? "Servidor colocado em manutenção."
+            : "Servidor reativado."
+    );
+
+    await loadMaintenanceState();
+}
+
+document
+    .getElementById("enableMaintenanceButton")
+    .addEventListener("click", async () => {
+        if (!confirm("Pausar o servidor para manutenção?")) return;
+        try { await setMaintenance(true); }
+        catch (error) { toast(error.message); }
+    });
+
+document
+    .getElementById("disableMaintenanceButton")
+    .addEventListener("click", async () => {
+        try { await setMaintenance(false); }
+        catch (error) { toast(error.message); }
+    });
 
 document
     .getElementById("pauseKeyButton")
@@ -2360,9 +2539,9 @@ async function loadKeys() {
 
                                     <span>
                                         ${
-                                            key.device_bound
-                                                ? "UDID VINCULADO"
-                                                : "SEM UDID"
+                                            key.hwid_bound
+                                                ? "HWID VINCULADO"
+                                                : "SEM HWID"
                                         }
                                     </span>
 
@@ -3441,8 +3620,8 @@ function rShow(u){
 function rLogoutLocal(){rToken="";rMe=null;localStorage.removeItem(R_TOKEN_KEY);if(rPoll){clearInterval(rPoll);rPoll=null}rStopDeadlineTimer();document.getElementById("resellerPanel").style.display="none";showLogin()}
 async function rRefreshMe(){const{x:_,response,data}=await rReq("/api/reseller/me");if(!response.ok||!data.success)throw Error(data.message||"Falha ao atualizar");rShow(data.user);return data.user}
 async function rHistory(){const c=document.getElementById("rHistory");c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Carregando...</div>';try{const{response,data}=await rReq("/api/reseller/keys");if(!response.ok||!data.success)throw Error(data.message||"Erro no historico");if(!data.keys?.length){c.innerHTML='<div style="color:#777;text-align:center;padding:10px">Nenhuma key gerada.</div>';return}c.innerHTML=data.keys.map(k=>`<div class="reseller-history-item"><div class="reseller-history-key">${escapeHtml(k.key)}</div><div class="reseller-history-meta"><span>${escapeHtml(statusText(k.status))}</span><span>${escapeHtml(String(k.days||"-"))} ${Number(k.days)===1?"dia":"dias"}</span><span>${escapeHtml(rMoney(k.price||0))}</span><span>${escapeHtml(formatDate(k.created_at))}</span></div></div>`).join("")}catch(e){c.innerHTML='<div style="color:var(--red);text-align:center;padding:10px">'+escapeHtml(e.message)+'</div>'}}
-async function rCheck(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Digite uma key.");try{const{response,data}=await rReq("/api/reseller/keys/check",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao consultar");if(!data.found){document.getElementById("rCheckResult").style.display="none";return toast("Key nao encontrada.")}document.getElementById("rCheckStatus").textContent=statusText(data.status);document.getElementById("rCheckPlan").textContent=data.days?data.days+" dias":"-";document.getElementById("rCheckCreated").textContent=formatDate(data.created_at);document.getElementById("rCheckActivated").textContent=formatDate(data.activated_at);document.getElementById("rCheckExpires").textContent=formatDate(data.expires_at);document.getElementById("rCheckDevice").textContent=data.device_bound?"Vinculado":"N\u00E3o vinculado";document.getElementById("rResetUdidBtn").disabled=!data.device_bound;document.getElementById("rCheckResult").style.display="block"}catch(e){toast(e.message)}}
-async function rResetUdid(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Consulte uma key primeiro.");if(!confirm("Resetar o UDID desta key? O status e o tempo atual serao preservados."))return;const btn=document.getElementById("rResetUdidBtn");btn.disabled=true;try{const{response,data}=await rReq("/api/reseller/keys/device/reset",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Nao foi possivel resetar o UDID.");toast("UDID resetado.");await rCheck();await rHistory()}catch(e){toast(e.message);btn.disabled=false}}
+async function rCheck(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Digite uma key.");try{const{response,data}=await rReq("/api/reseller/keys/check",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Erro ao consultar");if(!data.found){document.getElementById("rCheckResult").style.display="none";return toast("Key nao encontrada.")}document.getElementById("rCheckStatus").textContent=statusText(data.status);document.getElementById("rCheckPlan").textContent=data.days?data.days+" dias":"-";document.getElementById("rCheckCreated").textContent=formatDate(data.created_at);document.getElementById("rCheckActivated").textContent=formatDate(data.activated_at);document.getElementById("rCheckExpires").textContent=formatDate(data.expires_at);document.getElementById("rCheckHwid").textContent=data.device_hwid||"N\u00E3o vinculado";document.getElementById("rResetHwidBtn").disabled=!data.hwid_bound;document.getElementById("rCheckResult").style.display="block"}catch(e){toast(e.message)}}
+async function rResetHwid(){const key=document.getElementById("rCheckInput").value.trim();if(!key)return toast("Consulte uma key primeiro.");if(!confirm("Resetar o HWID desta key? O status e o tempo atual serao preservados."))return;const btn=document.getElementById("rResetHwidBtn");btn.disabled=true;try{const{response,data}=await rReq("/api/reseller/keys/hwid/reset",{method:"POST",body:JSON.stringify({key})});if(!response.ok||!data.success)throw Error(data.message||"Nao foi possivel resetar o HWID.");toast("HWID resetado.");await rCheck();await rHistory()}catch(e){toast(e.message);btn.disabled=false}}
 async function rGenerate(){
     const plan=document.getElementById("rPlan").value;
     const prefixInput=document.getElementById("rPrefix");
@@ -3543,7 +3722,7 @@ async function rCreatePix(){
 document.getElementById("openResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.add("show");document.getElementById("closeResellerAuth").onclick=()=>document.getElementById("resellerAuthOverlay").classList.remove("show");document.querySelectorAll("[data-r-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-r-tab]").forEach(x=>x.classList.toggle("active",x===b));document.getElementById("rLogin").classList.toggle("active",b.dataset.rTab==="login");document.getElementById("rRegister").classList.toggle("active",b.dataset.rTab==="register")});
 document.getElementById("rLoginBtn").onclick=async()=>{const m=document.getElementById("rLoginMsg");try{const{response,data}=await rReq("/api/reseller/auth/login",{method:"POST",body:JSON.stringify({username:document.getElementById("rLoginUser").value.trim(),password:document.getElementById("rLoginPass").value})},false);if(!response.ok||!data.success||!data.token)throw Error(data.message||"Usu\u00E1rio ou senha inv\u00E1lidos");rToken=data.token;localStorage.setItem(R_TOKEN_KEY,rToken);rShow(data.user);await rHistory()}catch(e){m.textContent=e.message;m.className="message error"}};
 document.getElementById("rRegBtn").onclick=async()=>{const m=document.getElementById("rRegMsg");try{const{response,data}=await rReq("/api/reseller/auth/register",{method:"POST",body:JSON.stringify({username:document.getElementById("rRegUser").value.trim(),email:document.getElementById("rRegEmail").value.trim(),password:document.getElementById("rRegPass").value})},false);if(!response.ok||!data.success)throw Error(data.message||"Erro ao criar conta");if(data.user?.first_deposit_deadline_at){rStartRegisterDeadline(data.user.first_deposit_deadline_at)}else{m.textContent="Conta criada. Agora fa\u00E7a login.";m.className="message success"}}catch(e){m.textContent=e.message;m.className="message error"}};
-document.getElementById("rLogout").onclick=rLogoutLocal;document.getElementById("rRefresh").onclick=async()=>{try{await rRefreshMe();await rHistory()}catch(e){toast(e.message)}};document.getElementById("rHistoryRefresh").onclick=rHistory;document.getElementById("rGenerate").onclick=rGenerate;document.getElementById("rCheckBtn").onclick=rCheck;document.getElementById("rCheckGen").onclick=rCheck;document.getElementById("rResetUdidBtn").onclick=rResetUdid;document.getElementById("rCopyKey").onclick=async()=>{const v=document.getElementById("rGenKey").textContent.trim();if(v&&v!=="-")await navigator.clipboard.writeText(v)};document.getElementById("rDeposit").onclick=()=>{
+document.getElementById("rLogout").onclick=rLogoutLocal;document.getElementById("rRefresh").onclick=async()=>{try{await rRefreshMe();await rHistory()}catch(e){toast(e.message)}};document.getElementById("rHistoryRefresh").onclick=rHistory;document.getElementById("rGenerate").onclick=rGenerate;document.getElementById("rCheckBtn").onclick=rCheck;document.getElementById("rCheckGen").onclick=rCheck;document.getElementById("rResetHwidBtn").onclick=rResetHwid;document.getElementById("rCopyKey").onclick=async()=>{const v=document.getElementById("rGenKey").textContent.trim();if(v&&v!=="-")await navigator.clipboard.writeText(v)};document.getElementById("rDeposit").onclick=()=>{
 document.getElementById("rDepositError").style.display="none";
 document.getElementById("rPixBox").classList.remove("show");
 document.getElementById("rDepositOverlay").classList.add("show");
