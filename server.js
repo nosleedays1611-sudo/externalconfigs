@@ -666,10 +666,25 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
+    const maintenance = getMaintenanceState();
+
     res.json({
         ok: true,
         message: "API funcionando",
-        url: PUBLIC_URL
+        url: PUBLIC_URL,
+        maintenance: maintenance.enabled
+    });
+});
+
+app.get("/api/system/status", (req, res) => {
+    const maintenance = getMaintenanceState();
+
+    res.json({
+        success: true,
+        maintenance: maintenance.enabled,
+        message: maintenance.enabled
+            ? maintenance.message
+            : "Servidor online"
     });
 });
 
@@ -694,6 +709,17 @@ function normalizeUDID(value) {
 
 function validUDID(value) {
     return /^[A-Z0-9-]{8,128}$/.test(value);
+}
+
+function normalizeHWID(value) {
+    return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
+}
+
+function validHWID(value) {
+    return /^[A-Z0-9._:-]{8,256}$/.test(value);
 }
 
 function sanitizePrefix(value) {
@@ -1020,7 +1046,7 @@ function activateKeyAfterDeviceEnrollment(keyData, udid) {
 
         const activatedAt = nowISO();
         const expiresAt =
-            calculateExpiration(days);
+            calculateKeyExpiration(fresh, days);
 
         db.prepare(`
             UPDATE keys
@@ -1068,6 +1094,61 @@ function hashToken(token) {
         .createHash("sha256")
         .update(String(token))
         .digest("hex");
+}
+
+const DEFAULT_MAINTENANCE_MESSAGE =
+    "Servidor pausado devido a uma manutenção.";
+
+function getMaintenanceState() {
+    const enabled =
+        String(
+            db.getSystemSetting(
+                "maintenance_enabled",
+                "0"
+            )
+        ) === "1";
+
+    const message =
+        String(
+            db.getSystemSetting(
+                "maintenance_message",
+                DEFAULT_MAINTENANCE_MESSAGE
+            ) || DEFAULT_MAINTENANCE_MESSAGE
+        ).trim() || DEFAULT_MAINTENANCE_MESSAGE;
+
+    return { enabled, message };
+}
+
+function maintenanceBlocked(res) {
+    const state = getMaintenanceState();
+
+    if (!state.enabled) {
+        return false;
+    }
+
+    res.status(503).json({
+        success: false,
+        code: "SERVER_MAINTENANCE",
+        maintenance: true,
+        message: state.message
+    });
+
+    return true;
+}
+
+function keyBonusMs(keyData) {
+    const value = Number(keyData?.bonus_ms || 0);
+    return Number.isFinite(value) && value > 0
+        ? Math.floor(value)
+        : 0;
+}
+
+function calculateKeyExpiration(keyData, days, from = Date.now()) {
+    return new Date(
+        Number(from) +
+        Number(days) * 24 * 60 * 60 * 1000 +
+        keyBonusMs(keyData)
+    ).toISOString();
 }
 
 function createSession(userId) {
@@ -2506,11 +2587,23 @@ app.post(
                     keyData.remaining_ms,
 
                 device_bound:
-                    Boolean(keyData.device_udid),
+                    Boolean(
+                        keyData.device_hwid ||
+                        keyData.device_udid
+                    ),
                 device_udid:
                     keyData.device_udid || null,
                 device_bound_at:
                     keyData.device_bound_at,
+
+                hwid_bound:
+                    Boolean(keyData.device_hwid),
+                device_hwid:
+                    keyData.device_hwid || null,
+                hwid_bound_at:
+                    keyData.hwid_bound_at || null,
+                bonus_ms:
+                    keyBonusMs(keyData),
 
                 created_by_username:
                     keyData.created_by_username ||
@@ -2535,6 +2628,10 @@ app.post(
 
 app.post("/api/keys/check", (req, res) => {
     try {
+        if (maintenanceBlocked(res)) {
+            return;
+        }
+
         const key =
             String(req.body.key || "").trim();
 
@@ -2650,10 +2747,18 @@ app.post("/api/keys/check", (req, res) => {
 
             device_bound:
                 Boolean(
+                    keyData.device_hwid ||
                     keyData.device_udid
                 ),
             device_bound_at:
                 keyData.device_bound_at,
+
+            hwid_bound:
+                Boolean(keyData.device_hwid),
+            device_hwid:
+                keyData.device_hwid || null,
+            hwid_bound_at:
+                keyData.hwid_bound_at || null,
 
             device_proof_required:
                 Boolean(
@@ -2675,6 +2780,190 @@ app.post("/api/keys/check", (req, res) => {
         });
     }
 });
+
+/* =========================================================
+   HWID AUTH - NOVA AUTH
+   Detecta o HWID na dylib e envia key + hwid.
+   Primeiro uso vincula e ativa; mesmo HWID libera; outro bloqueia.
+========================================================= */
+
+app.post(
+    "/api/keys/hwid/auth",
+    (req, res) => {
+        try {
+            if (maintenanceBlocked(res)) {
+                return;
+            }
+
+            const key =
+                String(req.body.key || "").trim();
+
+            const hwid =
+                normalizeHWID(req.body.hwid);
+
+            if (!key || !hwid) {
+                return res.status(400).json({
+                    success: false,
+                    code: "KEY_HWID_REQUIRED",
+                    message: "Key e HWID são obrigatórios"
+                });
+            }
+
+            if (!validHWID(hwid)) {
+                return res.status(400).json({
+                    success: false,
+                    code: "INVALID_HWID",
+                    message: "HWID inválido"
+                });
+            }
+
+            let keyData = getKey(key);
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    found: false,
+                    code: "KEY_NOT_FOUND",
+                    message: "Key não encontrada"
+                });
+            }
+
+            let status = checkKeyExpiration(keyData);
+            keyData = getKey(key);
+
+            if (status === "expired") {
+                return res.status(403).json({
+                    success: false,
+                    found: true,
+                    code: "KEY_EXPIRED",
+                    status,
+                    message: "Key expirada"
+                });
+            }
+
+            if (status === "paused") {
+                return res.status(403).json({
+                    success: false,
+                    found: true,
+                    code: "KEY_PAUSED",
+                    status,
+                    remaining_ms: keyData.remaining_ms,
+                    message: "Key pausada"
+                });
+            }
+
+            if (keyData.device_hwid) {
+                if (
+                    normalizeHWID(keyData.device_hwid) !== hwid
+                ) {
+                    return res.status(403).json({
+                        success: false,
+                        found: true,
+                        code: "DEVICE_MISMATCH",
+                        status,
+                        message: "Essa key já está vinculada a outro dispositivo."
+                    });
+                }
+            } else {
+                const boundAt = nowISO();
+
+                const bound = db.prepare(`
+                    UPDATE keys
+                    SET
+                        device_hwid = ?,
+                        hwid_bound_at = ?,
+                        hwid_reset_at = NULL
+                    WHERE id = ?
+                      AND device_hwid IS NULL
+                `).run(
+                    hwid,
+                    boundAt,
+                    keyData.id
+                );
+
+                if (bound.changes !== 1) {
+                    const latest = getKey(key);
+
+                    if (
+                        !latest ||
+                        normalizeHWID(latest.device_hwid) !== hwid
+                    ) {
+                        return res.status(403).json({
+                            success: false,
+                            found: true,
+                            code: "DEVICE_MISMATCH",
+                            status,
+                            message: "Essa key já está vinculada a outro dispositivo."
+                        });
+                    }
+                }
+
+                keyData = getKey(key);
+            }
+
+            if (status === "unused") {
+                const days = getDaysFromKey(keyData);
+
+                if (!Number.isInteger(days) || days <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        code: "INVALID_PLAN",
+                        message: "Plano da key inválido"
+                    });
+                }
+
+                const activatedAt = nowISO();
+                const expiresAt =
+                    calculateKeyExpiration(
+                        keyData,
+                        days
+                    );
+
+                db.prepare(`
+                    UPDATE keys
+                    SET
+                        status = 'active',
+                        activated_at = ?,
+                        expires_at = ?,
+                        paused_at = NULL,
+                        remaining_ms = NULL
+                    WHERE id = ?
+                `).run(
+                    activatedAt,
+                    expiresAt,
+                    keyData.id
+                );
+
+                keyData = getKey(key);
+                status = "active";
+            }
+
+            return res.json({
+                success: true,
+                found: true,
+                key: keyData.key,
+                prefix: keyData.prefix,
+                status,
+                days: getDaysFromKey(keyData),
+                activated_at: keyData.activated_at,
+                expires_at: keyData.expires_at,
+                paused_at: keyData.paused_at,
+                remaining_ms: keyData.remaining_ms,
+                hwid_bound: true,
+                hwid: keyData.device_hwid,
+                hwid_bound_at: keyData.hwid_bound_at
+            });
+
+        } catch (error) {
+            console.error("Erro na autenticação HWID:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno na autenticação HWID"
+            });
+        }
+    }
+);
 
 /* =========================================================
    UDID - BIND
@@ -2975,7 +3264,7 @@ app.post("/api/keys/activate", (req, res) => {
 
         const activatedAt = nowISO();
         const expiresAt =
-            calculateExpiration(days);
+            calculateKeyExpiration(keyData, days);
 
         db.prepare(`
             UPDATE keys
@@ -3047,9 +3336,13 @@ app.post(
                     device_udid = NULL,
                     device_bound_at = NULL,
                     device_token_hash = NULL,
-                    device_reset_at = ?
+                    device_reset_at = ?,
+                    device_hwid = NULL,
+                    hwid_bound_at = NULL,
+                    hwid_reset_at = ?
                 WHERE id = ?
             `).run(
+                resetAt,
                 resetAt,
                 keyData.id
             );
@@ -3080,7 +3373,9 @@ app.post(
                 paused_at: fresh.paused_at,
                 remaining_ms: fresh.remaining_ms,
                 device_bound: false,
-                device_reset_at: resetAt
+                hwid_bound: false,
+                device_reset_at: resetAt,
+                hwid_reset_at: resetAt
             });
 
         } catch (error) {
@@ -3089,6 +3384,68 @@ app.post(
             res.status(500).json({
                 success: false,
                 message: "Erro interno ao resetar informações da key"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   RESET HWID
+   Preserva status, ativação, expiração e tempo restante.
+========================================================= */
+
+app.post(
+    "/api/keys/hwid/reset",
+    authRequired,
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            const keyData = getAccessibleKey(key, req.user);
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Key não encontrada"
+                });
+            }
+
+            const resetAt = nowISO();
+
+            db.prepare(`
+                UPDATE keys
+                SET
+                    device_hwid = NULL,
+                    hwid_bound_at = NULL,
+                    hwid_reset_at = ?
+                WHERE id = ?
+            `).run(
+                resetAt,
+                keyData.id
+            );
+
+            logAction(
+                req.user.id,
+                "reset_hwid",
+                "key",
+                keyData.key
+            );
+
+            return res.json({
+                success: true,
+                message: "HWID resetado com sucesso",
+                key: keyData.key,
+                hwid_bound: false,
+                hwid_reset_at: resetAt
+            });
+
+        } catch (error) {
+            console.error("Erro ao resetar HWID:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao resetar HWID"
             });
         }
     }
@@ -3437,6 +3794,246 @@ app.post(
 );
 
 /* =========================================================
+   MASTER OWNER - ADICIONAR HORAS A UMA KEY
+   Somente a conta definida em MASTER_OWNER (nextaway).
+========================================================= */
+
+app.post(
+    "/api/admin/keys/add-hours",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            const hours = Number(req.body.hours);
+
+            if (!key) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key não informada"
+                });
+            }
+
+            if (
+                !Number.isFinite(hours) ||
+                hours <= 0 ||
+                hours > 87600
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Quantidade de horas inválida"
+                });
+            }
+
+            let keyData = getKey(key);
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Key não encontrada"
+                });
+            }
+
+            let status = checkKeyExpiration(keyData);
+            keyData = getKey(key);
+
+            const addMs = Math.round(
+                hours * 60 * 60 * 1000
+            );
+
+            const currentBonus = keyBonusMs(keyData);
+            let expiresAt = keyData.expires_at;
+            let remainingMs = keyData.remaining_ms;
+
+            if (status === "unused") {
+                db.prepare(`
+                    UPDATE keys
+                    SET bonus_ms = ?
+                    WHERE id = ?
+                `).run(
+                    currentBonus + addMs,
+                    keyData.id
+                );
+
+            } else if (status === "paused") {
+                remainingMs =
+                    Math.max(
+                        0,
+                        Number(keyData.remaining_ms || 0)
+                    ) + addMs;
+
+                db.prepare(`
+                    UPDATE keys
+                    SET
+                        bonus_ms = ?,
+                        remaining_ms = ?
+                    WHERE id = ?
+                `).run(
+                    currentBonus + addMs,
+                    remainingMs,
+                    keyData.id
+                );
+
+            } else if (status === "active") {
+                const base = Math.max(
+                    Date.now(),
+                    keyData.expires_at
+                        ? new Date(keyData.expires_at).getTime()
+                        : Date.now()
+                );
+
+                expiresAt =
+                    new Date(base + addMs).toISOString();
+
+                db.prepare(`
+                    UPDATE keys
+                    SET
+                        bonus_ms = ?,
+                        expires_at = ?
+                    WHERE id = ?
+                `).run(
+                    currentBonus + addMs,
+                    expiresAt,
+                    keyData.id
+                );
+
+            } else if (status === "expired") {
+                expiresAt =
+                    new Date(Date.now() + addMs).toISOString();
+
+                db.prepare(`
+                    UPDATE keys
+                    SET
+                        status = 'active',
+                        bonus_ms = ?,
+                        expires_at = ?,
+                        paused_at = NULL,
+                        remaining_ms = NULL
+                    WHERE id = ?
+                `).run(
+                    currentBonus + addMs,
+                    expiresAt,
+                    keyData.id
+                );
+
+                status = "active";
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: "Status da key não permite adicionar horas"
+                });
+            }
+
+            const fresh = getKey(key);
+            status = checkKeyExpiration(fresh);
+
+            logAction(
+                req.user.id,
+                "add_key_hours",
+                "key",
+                `${fresh.key}:${hours}h`
+            );
+
+            return res.json({
+                success: true,
+                message: `${hours} hora(s) adicionada(s) com sucesso`,
+                key: fresh.key,
+                status,
+                added_hours: hours,
+                bonus_ms: keyBonusMs(fresh),
+                expires_at: fresh.expires_at,
+                remaining_ms: fresh.remaining_ms
+            });
+
+        } catch (error) {
+            console.error("Erro ao adicionar horas à key:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao adicionar horas"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   MASTER OWNER - MODO MANUTENÇÃO DO SERVIDOR
+========================================================= */
+
+app.get(
+    "/api/admin/system/maintenance",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        const state = getMaintenanceState();
+
+        return res.json({
+            success: true,
+            enabled: state.enabled,
+            message: state.message
+        });
+    }
+);
+
+app.post(
+    "/api/admin/system/maintenance",
+    authRequired,
+    masterOwnerRequired,
+    (req, res) => {
+        try {
+            const enabled = Boolean(req.body.enabled);
+
+            const message =
+                String(
+                    req.body.message ||
+                    DEFAULT_MAINTENANCE_MESSAGE
+                )
+                .trim()
+                .slice(0, 240) ||
+                DEFAULT_MAINTENANCE_MESSAGE;
+
+            db.setSystemSetting(
+                "maintenance_enabled",
+                enabled ? "1" : "0"
+            );
+
+            db.setSystemSetting(
+                "maintenance_message",
+                message
+            );
+
+            logAction(
+                req.user.id,
+                enabled
+                    ? "maintenance_enabled"
+                    : "maintenance_disabled",
+                "system",
+                "maintenance"
+            );
+
+            return res.json({
+                success: true,
+                enabled,
+                message,
+                code: enabled
+                    ? "SERVER_MAINTENANCE"
+                    : "SERVER_ONLINE"
+            });
+
+        } catch (error) {
+            console.error("Erro ao alterar manutenção:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao alterar manutenção"
+            });
+        }
+    }
+);
+
+/* =========================================================
    DELETAR KEY
 ========================================================= */
 
@@ -3532,8 +4129,11 @@ app.get(
                         ),
                     device_bound:
                         Boolean(
+                            keyData.device_hwid ||
                             keyData.device_udid
-                        )
+                        ),
+                    hwid_bound:
+                        Boolean(keyData.device_hwid)
                 })
             );
 
@@ -3564,6 +4164,10 @@ app.post(
     "/api/device/session",
     (req, res) => {
         try {
+            if (maintenanceBlocked(res)) {
+                return;
+            }
+
             const key =
                 String(req.body.key || "").trim();
 
@@ -5353,8 +5957,15 @@ app.get(
                             row.expires_at,
                         device_bound:
                             Boolean(
+                                row.device_hwid ||
                                 row.device_udid
-                            )
+                            ),
+                        hwid_bound:
+                            Boolean(row.device_hwid),
+                        device_hwid:
+                            row.device_hwid || null,
+                        hwid_bound_at:
+                            row.hwid_bound_at || null
                     })
                 );
 
@@ -5447,8 +6058,15 @@ app.post(
                     row.expires_at,
                 device_bound:
                     Boolean(
+                        row.device_hwid ||
                         row.device_udid
-                    )
+                    ),
+                hwid_bound:
+                    Boolean(row.device_hwid),
+                device_hwid:
+                    row.device_hwid || null,
+                hwid_bound_at:
+                    row.hwid_bound_at || null
             });
 
         } catch (error) {
@@ -5461,6 +6079,92 @@ app.post(
                 success: false,
                 message:
                     "Erro interno ao consultar key"
+            });
+        }
+    }
+);
+
+/* =========================================================
+   REVENDEDOR - RESETAR HWID DA PRÓPRIA KEY
+   Preserva status, ativação, expiração e tempo restante.
+========================================================= */
+
+app.post(
+    "/api/reseller/keys/hwid/reset",
+    resellerAuthRequired,
+    (req, res) => {
+        try {
+            const key =
+                String(req.body.key || "").trim();
+
+            if (!key) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Key nao informada"
+                });
+            }
+
+            const keyData =
+                db.prepare(`
+                    SELECT keys.*
+                    FROM reseller_keys
+                    JOIN keys
+                        ON keys.id = reseller_keys.key_id
+                    WHERE reseller_keys.reseller_id = ?
+                      AND keys.key = ?
+                    LIMIT 1
+                `).get(
+                    req.reseller.id,
+                    key
+                );
+
+            if (!keyData) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Key nao encontrada ou nao pertence a esta conta"
+                });
+            }
+
+            const resetAt = nowISO();
+
+            db.prepare(`
+                UPDATE keys
+                SET
+                    device_hwid = NULL,
+                    hwid_bound_at = NULL,
+                    hwid_reset_at = ?
+                WHERE id = ?
+            `).run(
+                resetAt,
+                keyData.id
+            );
+
+            const fresh = getKey(keyData.key);
+            const status = checkKeyExpiration(fresh);
+
+            return res.json({
+                success: true,
+                message: "HWID resetado com sucesso",
+                key: fresh.key,
+                status,
+                days: getDaysFromKey(fresh),
+                activated_at: fresh.activated_at,
+                expires_at: fresh.expires_at,
+                paused_at: fresh.paused_at,
+                remaining_ms: fresh.remaining_ms,
+                hwid_bound: false,
+                hwid_reset_at: resetAt
+            });
+
+        } catch (error) {
+            console.error(
+                "Erro ao resetar HWID do revendedor:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Erro interno ao resetar HWID"
             });
         }
     }
